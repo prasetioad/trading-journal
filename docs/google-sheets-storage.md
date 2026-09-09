@@ -36,6 +36,37 @@ Kalau Sheet masih kosong saat pertama konek, data demo lokal otomatis ditulis ke
 
 ---
 
+## Harga saham IDX (auto SL/TP)
+
+`Code.gs` yang sama juga jadi **proxy harga saham** (Yahoo Finance, server-side,
+tanpa masalah CORS):
+
+```
+GET <WEBAPP_URL>?action=quote&symbols=BBCA.JK,BBRI.JK
+-> [{ symbol, price, dayLow, dayHigh, time, currency }]
+```
+
+Aplikasi otomatis:
+- Meng-poll harga tiap **60 detik** untuk setiap trade **stock** yang `open` dan
+  prediksi stock yang `pending` (ticker IDX otomatis diberi akhiran `.JK`).
+- Menutup trade / me-resolve prediksi saat **range harian [low, high]** menyentuh
+  SL/TP (pakai range, bukan cuma harga terakhir, supaya sentuhan intraday tidak
+  terlewat walau data delay ~15 menit). SL dicek lebih dulu bila keduanya masuk range.
+- Mencatat `closed_at` = waktu deteksi (delay), dan toast menyertakan timestamp
+  data Yahoo.
+
+Chip **"IDX (delay) · N saham"** muncul di header saat ada saham yang diawasi.
+
+> Kalau `VITE_SHEETS_WEBAPP_URL` tidak diset, app pakai proxy CORS publik
+> (`api.allorigins.win`) — jalan tapi kurang stabil. Override dengan
+> `VITE_STOCK_PROXY=` di `.env.local` bila punya proxy sendiri.
+
+**Setelah mengubah `Code.gs`** (mis. menambah fitur quote ini), kamu **wajib
+re-deploy**: Apps Script ▸ **Deploy ▸ Manage deployments ▸** (pensil) ▸ *Version:
+New version* ▸ **Deploy**. URL `/exec` tetap sama.
+
+---
+
 ## Bentuk data di Sheet
 
 4 tab dibuat otomatis: `strategies`, `journal`, `analyses`, `plans`.

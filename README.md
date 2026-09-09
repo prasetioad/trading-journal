@@ -36,7 +36,7 @@ Opsional: salin `.env.example` → `.env.local` untuk mengaktifkan Supabase / Cl
 | **3 · My Analysis / Prediction** — CRUD, target vs invalidation, live price + % ke target | ✅ |
 | **4 · Dashboard** — AI Briefing, Strategy League (Expectancy), Emotional Leak, Discipline Gauge, R:R Gap, Equity Curve, Audit Psikologi, Live Positions | ✅ |
 | **5 · AI Daily Insight** — prompt batch + engine pluggable (Claude API / deterministik), tombol Regenerate | 🟡 client jadi; Edge Function scaffold |
-| **4 · Live saham IDX** | ⛔ butuh provider data |
+| **4 · Live saham IDX** | 🟡 delayed via Yahoo (proxy Apps Script / CORS-proxy); auto SL/TP pakai range harian — `docs/google-sheets-storage.md` |
 | **6 · Screener** | ⬜ ditunda (Non-Goal PRD) |
 | **7 · Polish** — export **& import** CSV, toast, mobile drawer | ✅ (PDF ⬜) |
 
@@ -86,6 +86,7 @@ src/
     verify.ts               Aturan crossing SL/TP & target/invalidation (murni)
     binance.ts              Live price feed (WS + REST fallback) + fetchSpotSymbols
     pairs.ts                Crypto pair list (curated + live Binance, cached) for the picker
+    stocks.ts               Delayed IDX quotes (Yahoo via Apps Script / CORS proxy)
     storage.ts             Screenshot: compress client → data URL (seam ke Supabase Storage)
     csv.ts                  Export + import CSV jurnal & analisa
     ai/prompt.ts            Prompt batch harian (dependency-free, dishare ke Edge Fn)

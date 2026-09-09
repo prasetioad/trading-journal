@@ -149,7 +149,7 @@ Kode sudah siap; yang kurang hanya kredensial. Storage saat ini = Google Sheets
 | Flip store ke `repository.supabase.ts` (async row-level) | 🟡 | ikuti MIGRATION-SUPABASE.md |
 | Screenshot → Supabase Storage bucket | 🟡 | ganti body `src/lib/storage.ts` |
 | Edge Function `ai-daily` deploy + `ANTHROPIC_API_KEY` | 🟡 | `supabase secrets set` + `functions deploy` |
-| `price-verifier` cabang saham IDX | ⛔ | pilih provider data IDX, implementasi `fetchStockQuotes()` |
+| ~~`price-verifier` cabang saham IDX~~ | ✅ (client) | Yahoo delayed via `src/lib/stocks.ts` + `Code.gs ?action=quote`; auto-close pakai range harian, poll 60 dtk. Server-side verifier tetap TODO. |
 
 ---
 

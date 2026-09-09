@@ -6,7 +6,10 @@
  *   Type "Web app" ▸ Execute as: Me ▸ Who has access: Anyone ▸ Deploy.
  * Copy the /exec URL into the app's .env.local as VITE_SHEETS_WEBAPP_URL.
  *
- * GET  ?             -> { strategies, journal, analyses, plans }  (whole dataset)
+ * GET  ?                       -> { strategies, journal, analyses, plans }
+ * GET  ?action=quote&symbols=BBCA.JK,BBRI.JK
+ *                               -> [{ symbol, price, dayLow, dayHigh, time, currency }]
+ *                                  (delayed IDX/stock quotes via Yahoo, server-side — no CORS)
  * POST { action:'writeAll', db:{...} }  -> rewrites every tab, returns { ok:true }
  *
  * Tabs are created on demand. Row 1 is a human-readable header; arrays are stored
@@ -61,8 +64,15 @@ function json_(obj) {
   );
 }
 
-function doGet() {
+function doGet(e) {
   try {
+    if (e && e.parameter && e.parameter.action === 'quote') {
+      var symbols = String(e.parameter.symbols || '')
+        .split(',')
+        .map(function (s) { return s.trim(); })
+        .filter(String);
+      return json_(yahooQuotes_(symbols));
+    }
     var out = {};
     Object.keys(SCHEMAS).forEach(function (name) {
       out[name] = readTab_(name);
@@ -71,6 +81,36 @@ function doGet() {
   } catch (err) {
     return json_({ error: String(err) });
   }
+}
+
+/** Delayed quotes from Yahoo's chart endpoint (server-side fetch, no CORS). */
+function yahooQuotes_(symbols) {
+  var out = [];
+  symbols.forEach(function (sym) {
+    try {
+      var url =
+        'https://query1.finance.yahoo.com/v8/finance/chart/' +
+        encodeURIComponent(sym) +
+        '?interval=1d&range=1d';
+      var res = UrlFetchApp.fetch(url, {
+        muteHttpExceptions: true,
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+      });
+      var m = JSON.parse(res.getContentText()).chart.result[0].meta;
+      var price = Number(m.regularMarketPrice);
+      out.push({
+        symbol: sym.replace(/\.[A-Z]+$/i, ''),
+        price: price,
+        dayLow: m.regularMarketDayLow != null ? Number(m.regularMarketDayLow) : price,
+        dayHigh: m.regularMarketDayHigh != null ? Number(m.regularMarketDayHigh) : price,
+        time: (Number(m.regularMarketTime) || 0) * 1000,
+        currency: m.currency || 'IDR',
+      });
+    } catch (err) {
+      out.push({ symbol: String(sym).replace(/\.[A-Z]+$/i, ''), error: String(err) });
+    }
+  });
+  return out;
 }
 
 function doPost(e) {
