@@ -36,7 +36,8 @@ export async function fetchSpotSymbols(): Promise<string[]> {
       (s) =>
         s.status === 'TRADING' &&
         s.isSpotTradingAllowed !== false &&
-        (s.quoteAsset === 'USDT' || s.quoteAsset === 'USDC' || s.quoteAsset === 'BTC'),
+        // only quotes the live price feed can track (see isCryptoPair in verify.ts)
+        (s.quoteAsset === 'USDT' || s.quoteAsset === 'USDC'),
     )
     .map((s) => s.symbol)
     .sort()
