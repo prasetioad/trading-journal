@@ -1,5 +1,8 @@
-// Client-side CSV export (PRD §9 Fase 7). No dependency — build a string, download a Blob.
-import type { Analysis, JournalEntry, Strategy } from '../types'
+// Client-side CSV export + import (PRD §9 Fase 7 / Roadmap V2 A10).
+// No dependency — build/parse a string, download a Blob.
+import type { AssetType, Currency, JournalEntry, MarketCondition, Psychology, Strategy } from '../types'
+import type { Analysis } from '../types'
+import { MARKET_CONDITIONS, PSYCHOLOGY } from '../types'
 import { plannedRR } from './finance'
 
 function toCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
@@ -73,6 +76,146 @@ export function exportJournalCsv(journal: JournalEntry[], strategies: Strategy[]
     ]),
   )
   download(`trading-journal_${stamp()}.csv`, csv)
+}
+
+// ---------------------------------------------------------------------------
+// Import (Roadmap V2 A10) — parse the journal export format back to drafts.
+// Rows always import as OPEN positions (exit data is ignored). Extra columns
+// setup_tags | market_condition | confidence | risk_pct | planned_entry are
+// honoured when present.
+// ---------------------------------------------------------------------------
+
+export interface ImportedTrade {
+  asset_type: AssetType
+  pair: string
+  strategy_id: string | null
+  followed_plan: boolean
+  size_amount: number
+  size_currency: Currency
+  entry_price: number
+  take_profit: number
+  stop_loss: number
+  psychology: Psychology
+  reasoning: string
+  entry_at: string
+  planned_entry: number | null
+  setup_tags: string[]
+  market_condition: MarketCondition | null
+  confidence: number | null
+  risk_pct: number | null
+  screenshot_ref: null
+  mistakes: string[]
+}
+
+export interface ParseResult {
+  rows: ImportedTrade[]
+  errors: string[]
+}
+
+/** Minimal RFC-4180-ish CSV row splitter (handles quotes + embedded commas/newlines). */
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = []
+  let cur = ''
+  let inQ = false
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (inQ) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          cur += '"'
+          i++
+        } else inQ = false
+      } else cur += ch
+    } else if (ch === '"') inQ = true
+    else if (ch === ',') {
+      row.push(cur)
+      cur = ''
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++
+      row.push(cur)
+      cur = ''
+      if (row.some((c) => c !== '')) rows.push(row)
+      row = []
+    } else cur += ch
+  }
+  if (cur !== '' || row.length) {
+    row.push(cur)
+    if (row.some((c) => c !== '')) rows.push(row)
+  }
+  return rows
+}
+
+export function parseJournalCsv(text: string, strategies: Strategy[]): ParseResult {
+  const clean = text.replace(/^﻿/, '')
+  const table = parseCsv(clean)
+  const errors: string[] = []
+  if (table.length < 2) return { rows: [], errors: ['CSV kosong atau tanpa baris data.'] }
+
+  const header = table[0].map((h) => h.trim().toLowerCase())
+  const col = (name: string) => header.indexOf(name)
+  const need = ['pair', 'entry', 'take_profit', 'stop_loss']
+  const missing = need.filter((n) => col(n) === -1)
+  if (missing.length) return { rows: [], errors: [`Kolom wajib hilang: ${missing.join(', ')}`] }
+
+  const byName = new Map(strategies.map((s) => [s.name.toLowerCase(), s.id]))
+  const rows: ImportedTrade[] = []
+
+  for (let r = 1; r < table.length; r++) {
+    const line = table[r]
+    const get = (name: string) => {
+      const i = col(name)
+      return i === -1 ? '' : (line[i] ?? '').trim()
+    }
+    const numOr = (v: string, d: number | null) => (v === '' || Number.isNaN(Number(v)) ? d : Number(v))
+    const entry = numOr(get('entry') || get('entry_price'), null)
+    const tp = numOr(get('take_profit'), null)
+    const sl = numOr(get('stop_loss'), null)
+    if (entry == null || tp == null || sl == null || !get('pair')) {
+      errors.push(`Baris ${r + 1}: pair/entry/tp/sl tidak valid — dilewati.`)
+      continue
+    }
+    const psychRaw = get('psychology')
+    const psychology = (PSYCHOLOGY as readonly string[]).includes(psychRaw)
+      ? (psychRaw as Psychology)
+      : 'Netral'
+    const mcRaw = get('market_condition')
+    const market_condition = (MARKET_CONDITIONS as readonly string[]).includes(mcRaw)
+      ? (mcRaw as MarketCondition)
+      : null
+    const stratName = get('strategy').toLowerCase()
+
+    rows.push({
+      asset_type: get('asset_type') === 'stock' ? 'stock' : 'crypto',
+      pair: get('pair').toUpperCase(),
+      strategy_id: stratName ? (byName.get(stratName) ?? null) : null,
+      followed_plan: !/^(no|false|0|tidak)$/i.test(get('followed_plan')),
+      size_amount: numOr(get('size_amount'), 0) ?? 0,
+      size_currency: get('size_currency') === 'USD' ? 'USD' : 'IDR',
+      entry_price: entry,
+      take_profit: tp,
+      stop_loss: sl,
+      psychology,
+      reasoning: get('reasoning') || 'Imported',
+      entry_at: parseDate(get('entry_at') || get('created_at')),
+      planned_entry: numOr(get('planned_entry'), null),
+      setup_tags: (get('setup_tags') || '')
+        .split(/[|;]/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+      market_condition,
+      confidence: numOr(get('confidence'), null),
+      risk_pct: numOr(get('risk_pct'), null),
+      screenshot_ref: null,
+      mistakes: [],
+    })
+  }
+  return { rows, errors }
+}
+
+function parseDate(v: string): string {
+  const d = v ? new Date(v) : new Date()
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
 }
 
 export function exportAnalysesCsv(analyses: Analysis[]) {

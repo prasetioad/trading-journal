@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import type { JournalEntry } from '../types'
 import { DESTRUCTIVE_EMOTIONS } from '../types'
@@ -6,7 +6,7 @@ import { plannedRR } from '../lib/finance'
 import { dateShort, money, num, pct, rr } from '../lib/format'
 import { unrealized } from '../lib/verify'
 import { usePrices } from '../store/prices'
-import { exportJournalCsv } from '../lib/csv'
+import { exportJournalCsv, parseJournalCsv, type ImportedTrade } from '../lib/csv'
 import { runSearch } from '../lib/search'
 import { Badge, Card, EmptyState, SectionTitle } from '../components/ui/primitives'
 import { Modal } from '../components/ui/Modal'
@@ -18,8 +18,10 @@ import { isCryptoPair } from '../lib/verify'
 type Filter = 'all' | 'open' | 'closed'
 
 export default function Journal() {
-  const { journal, strategies, addTrade, closeTrade, reopenTrade, deleteTrade } = useStore()
+  const { journal, strategies, addTrade, addTrades, closeTrade, reopenTrade, deleteTrade } = useStore()
   const { prices } = usePrices()
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [importPreview, setImportPreview] = useState<{ rows: ImportedTrade[]; errors: string[] } | null>(null)
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<JournalEntry | null>(null)
   const [replaying, setReplaying] = useState<JournalEntry | null>(null)
@@ -55,6 +57,20 @@ export default function Journal() {
         hint="Catat setiap entry beserta emosi & kepatuhan SOP. R:R dihitung otomatis."
         right={
           <div className="flex gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0]
+                if (f) setImportPreview(parseJournalCsv(await f.text(), strategies))
+                if (fileRef.current) fileRef.current.value = ''
+              }}
+            />
+            <button className="btn btn-ghost" onClick={() => fileRef.current?.click()}>
+              Import CSV
+            </button>
             <button
               className="btn btn-ghost"
               onClick={() => exportJournalCsv(journal, strategies)}
@@ -281,6 +297,51 @@ export default function Journal() {
 
       <Modal open={!!lightbox} onClose={() => setLightbox(null)} title="Screenshot" wide>
         {lightbox && <img src={lightbox} alt="Screenshot trade" className="max-h-[70vh] w-full rounded-lg object-contain" />}
+      </Modal>
+
+      <Modal open={!!importPreview} onClose={() => setImportPreview(null)} title="Import CSV">
+        {importPreview && (
+          <div className="space-y-3 text-sm">
+            <p className="text-ink-soft">
+              <span className="font-semibold text-ink">{importPreview.rows.length}</span> trade siap
+              diimpor sebagai <span className="text-warn">posisi open</span> (data exit diabaikan).
+            </p>
+            {importPreview.errors.length > 0 && (
+              <ul className="max-h-32 space-y-0.5 overflow-y-auto rounded-lg border border-warn/30 bg-warn/5 p-2 text-[11px] text-warn">
+                {importPreview.errors.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            )}
+            {importPreview.rows.length > 0 && (
+              <div className="max-h-40 overflow-y-auto rounded-lg border border-border-soft text-[12px]">
+                {importPreview.rows.slice(0, 20).map((r, i) => (
+                  <div key={i} className="flex justify-between border-b border-border-soft px-2 py-1 last:border-0">
+                    <span className="font-medium text-ink">{r.pair}</span>
+                    <span className="tnum text-ink-mute">
+                      {r.entry_price} → TP {r.take_profit} / SL {r.stop_loss}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button className="btn btn-ghost" onClick={() => setImportPreview(null)}>
+                Batal
+              </button>
+              <button
+                className="btn btn-primary"
+                disabled={importPreview.rows.length === 0}
+                onClick={() => {
+                  addTrades(importPreview.rows)
+                  setImportPreview(null)
+                }}
+              >
+                Impor {importPreview.rows.length} trade
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )

@@ -1,8 +1,14 @@
 # Trading Journal & Analysis — Cockpit
 
-Implementasi PRD v2.1. Frontend React + Vite + TS + Tailwind, data lokal
-(localStorage), harga crypto **live dari Binance**, backend Supabase disiapkan di
-[`/supabase`](./supabase). Peta pengerjaan lengkap: [ROADMAP.md](./ROADMAP.md).
+Implementasi PRD v2.1 **+ Roadmap V2** ("Find your trading edge" — analitik
+performa, behavioral engine, AI coach). Frontend React + Vite + TS + Tailwind,
+data lokal (localStorage), harga crypto **live dari Binance**, backend Supabase
+disiapkan di [`/supabase`](./supabase).
+Peta pengerjaan: [ROADMAP.md](./ROADMAP.md) · [roadmapv2.md](./roadmapv2.md) ·
+model data: [docs/data-model.md](./docs/data-model.md).
+
+`npm test` menjalankan unit test (Vitest) untuk `lib/finance`, `analytics`,
+`rules`, `plan`, `search`, `csv`.
 
 ## Menjalankan
 
@@ -15,7 +21,7 @@ npm install
 npm run dev        # http://localhost:5173
 ```
 
-`npm run build` (typecheck + bundle) · `npm run typecheck` · `npm run lint`.
+`npm run build` (typecheck + bundle) · `npm run typecheck` · `npm run lint` · `npm test`.
 
 Data demo di-seed otomatis. Tombol **Reset data demo** / **Kosongkan data** di sidebar.
 Opsional: salin `.env.example` → `.env.local` untuk mengaktifkan Supabase / Claude API.
@@ -32,7 +38,27 @@ Opsional: salin `.env.example` → `.env.local` untuk mengaktifkan Supabase / Cl
 | **5 · AI Daily Insight** — prompt batch + engine pluggable (Claude API / deterministik), tombol Regenerate | 🟡 client jadi; Edge Function scaffold |
 | **4 · Live saham IDX** | ⛔ butuh provider data |
 | **6 · Screener** | ⬜ ditunda (Non-Goal PRD) |
-| **7 · Polish** — export CSV, toast, mobile drawer | ✅ (PDF ⬜) |
+| **7 · Polish** — export **& import** CSV, toast, mobile drawer | ✅ (PDF ⬜) |
+
+### Roadmap V2 — Track A (fitur, selesai)
+
+| Area | Status |
+|---|---|
+| A0 · Data model extension (entry_at, setup_tags, market_condition, confidence, risk_pct, screenshot, mistakes) + `trading_plans` | ✅ |
+| A1 · `lib/analytics.ts` — per jam / sesi / hari / setup / market condition, streaks, drawdown, Trading DNA | ✅ |
+| A2 · `lib/rules.ts` — behavioral flags (revenge, risk-creep, overtrading, late-entry, cut-profit-early), discipline per-trade, `autoInsights()` | ✅ |
+| A3 · Vitest + 36 unit tests | ✅ |
+| A4 · **Insights** page — auto Edge/Weakness/Behavioral/Time/Risk, Weekly Review, charts & tables, Trading DNA | ✅ |
+| A5 · **Trading Plan** module — plan harian + Plan vs Actual | ✅ |
+| A6 · Dashboard — Trading Calendar + Streak/Drawdown | ✅ |
+| A7 · Natural-language journal search (`lib/search.ts`) | ✅ |
+| A8 · Trade replay — Binance klines candlestick + playback | ✅ |
+| A9 · Screenshot upload (client compress) + lightbox | ✅ |
+| A10 · CSV import | ✅ |
+
+**Track B (butuh kredensial user):** flip ke Supabase + Auth/RLS, screenshot →
+Storage, deploy Edge Function `ai-daily`, provider data IDX. Lihat
+[roadmapv2.md](./roadmapv2.md) & [MIGRATION-SUPABASE.md](./MIGRATION-SUPABASE.md).
 
 ## Live price feed
 
@@ -50,26 +76,33 @@ src/
   lib/
     finance.ts             R:R, Expectancy, Profit Factor, Discipline, Leak,
                            Equity Curve, Psychology audit, R:R gap  (fungsi murni)
+    analytics.ts           Per jam/sesi/hari/setup/market, streaks, drawdown, Trading DNA
+    rules.ts               Behavioral flags + discipline per-trade + autoInsights()
+    plan.ts                planVsActual() — plan harian vs eksekusi
+    search.ts              Parser natural-language → filter jurnal
     fx.ts                   Normalisasi multi-currency → IDR untuk agregat portofolio
     verify.ts               Aturan crossing SL/TP & target/invalidation (murni)
-    binance.ts              Live price feed (WS + REST fallback)
-    csv.ts                  Export CSV jurnal & analisa
+    binance.ts              Live price feed (WS + REST fallback) + fetchKlines (replay)
+    storage.ts             Screenshot: compress client → data URL (seam ke Supabase Storage)
+    csv.ts                  Export + import CSV jurnal & analisa
     ai/prompt.ts            Prompt batch harian (dependency-free, dishare ke Edge Fn)
     ai/engine.ts            Engine pluggable: Claude API bila ada key, else deterministik
-    ai.ts                   Briefing deterministik dari data (fallback, biaya $0)
+    ai.ts                   Briefing + Weekly Review deterministik (fallback, biaya $0)
     supabase.ts             Client (aktif hanya bila env terisi)
     format.ts               Formatter uang / angka / R:R / tanggal
   store/
-    repository.ts           localStorage (default aktif)
+    repository.ts           localStorage (default aktif) + migrate() backfill V2
     repository.supabase.ts  CRUD async row-level (siap, belum di-wire — MIGRATION-SUPABASE.md)
-    store.tsx               Context + semua action
+    store.tsx               Context + semua action (trades, plans)
     prices.tsx              PricesProvider + auto-verify + toast
   components/ui/            Card, Badge, ProgressBar, Gauge, StatTile, Modal, Toast, form
-  features/{playbook,journal,analysis,dashboard}/
-  pages/                    Dashboard, Playbook, Journal, Analysis
+  features/{playbook,journal,analysis,dashboard,insights,plan}/
+  pages/                    Dashboard, Insights, Playbook, Journal, Plan, Analysis
+  test/factory.ts          Pembuat JournalEntry untuk unit test
 supabase/
-  migrations/0001_init.sql  Skema PRD §7 + RLS per-user
-  migrations/0002_cron.sql  Jadwal pg_cron (verifier 5 mnt, AI 17:00 WIB)
+  migrations/0001_init.sql       Skema PRD §7 + RLS per-user
+  migrations/0002_cron.sql       Jadwal pg_cron (verifier 5 mnt, AI 17:00 WIB)
+  migrations/0003_roadmapv2.sql  ALTER journal_entries + tabel trading_plans
   functions/price-verifier/ Edge Function auto SL/TP (Deno)
   functions/ai-daily/       Edge Function AI batch (Deno)
 scripts/check-node.mjs      Guard versi Node (predev/prebuild)
