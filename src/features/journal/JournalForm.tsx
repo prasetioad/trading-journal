@@ -8,7 +8,7 @@ import type {
   Strategy,
 } from '../../types'
 import { MARKET_CONDITIONS, MISTAKE_TAGS, PSYCHOLOGY, SETUP_TAGS } from '../../types'
-import { direction, plannedRR } from '../../lib/finance'
+import { direction, plannedRR, slOnLossSide } from '../../lib/finance'
 import { rr } from '../../lib/format'
 import { putScreenshot } from '../../lib/storage'
 import { CRYPTO_PAIRS, loadCryptoPairs } from '../../lib/pairs'
@@ -116,6 +116,11 @@ export function JournalForm({
 
   const dir = entry !== '' && tp !== '' ? direction(Number(entry), Number(tp)) : null
 
+  const slSideOk =
+    entry === '' || tp === '' || sl === ''
+      ? true
+      : slOnLossSide(Number(entry), Number(tp), Number(sl))
+
   const slip = useMemo(() => {
     if (entry === '' || plannedEntry === '' || !Number(plannedEntry)) return null
     return (Number(entry) - Number(plannedEntry)) / Number(plannedEntry)
@@ -129,6 +134,7 @@ export function JournalForm({
     tp !== '' &&
     sl !== '' &&
     Number(sl) !== Number(entry) &&
+    slSideOk &&
     reasoning.trim().length > 0
 
   async function onFile(file: File | undefined) {
@@ -317,6 +323,11 @@ export function JournalForm({
         <Badge tone="info">Planned R:R {rr(prr)}</Badge>
         {dir && <Badge tone={dir === 'long' ? 'brand' : 'lose'}>{dir === 'long' ? 'Long' : 'Short'}</Badge>}
         {prr != null && prr < 1.5 && <Badge tone="warn">R:R rendah — pertimbangkan skip</Badge>}
+        {!slSideOk && dir && (
+          <Badge tone="lose">
+            SL di sisi yang salah — untuk {dir === 'long' ? 'long, SL harus < entry' : 'short, SL harus > entry'}
+          </Badge>
+        )}
         {slip != null && Math.abs(slip) >= 0.01 && (
           <Badge tone="warn">
             Entry {slip > 0 ? 'di atas' : 'di bawah'} rencana {(Math.abs(slip) * 100).toFixed(1)}%

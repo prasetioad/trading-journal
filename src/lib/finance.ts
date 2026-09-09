@@ -15,6 +15,15 @@ export function direction(entry: number, tp: number): 'long' | 'short' {
   return tp >= entry ? 'long' : 'short'
 }
 
+/**
+ * SL must sit on the losing side of entry (below for a long, above for a short).
+ * A wrong-side SL turns an "exit at SL" into a fake win — guard the form with this.
+ */
+export function slOnLossSide(entry: number, tp: number, sl: number): boolean {
+  if (sl === entry) return false
+  return direction(entry, tp) === 'long' ? sl < entry : sl > entry
+}
+
 /** Planned R:R = |TP - Entry| / |Entry - SL| */
 export function plannedRR(entry: number, tp: number, sl: number): number | null {
   const risk = Math.abs(entry - sl)

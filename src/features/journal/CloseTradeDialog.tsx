@@ -26,6 +26,12 @@ export function CloseTradeDialog({
         }
   const oc = preview ? outcomeOf(preview.pnl) : null
 
+  // misconfigured levels: exit at SL but profit, or exit at TP but loss
+  const levelWarn =
+    preview != null &&
+    ((Number(exit) === trade.stop_loss && oc === 'win') ||
+      (Number(exit) === trade.take_profit && oc === 'lose'))
+
   return (
     <form
       onSubmit={(e) => {
@@ -73,6 +79,14 @@ export function CloseTradeDialog({
           </span>
           <Badge tone="info">Realized R:R {rr(preview.rrv)}</Badge>
         </div>
+      )}
+
+      {levelWarn && (
+        <p className="rounded-lg border border-lose/40 bg-lose/10 px-3 py-2 text-[12px] text-lose">
+          ⚠️ Keluar di {Number(exit) === trade.stop_loss ? 'SL' : 'TP'} tapi hasilnya{' '}
+          {oc === 'win' ? 'profit' : 'rugi'} — kemungkinan harga {Number(exit) === trade.stop_loss ? 'SL' : 'TP'} salah
+          input. Batalkan, perbaiki lewat <b>Edit trade</b> dulu.
+        </p>
       )}
 
       <div className="flex justify-end gap-2 pt-1">

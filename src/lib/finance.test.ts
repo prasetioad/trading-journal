@@ -4,6 +4,7 @@ import {
   realizedPnl,
   realizedRR,
   direction,
+  slOnLossSide,
   outcomeOf,
   applyTradeEdit,
   strategyStats,
@@ -25,6 +26,15 @@ describe('primitives', () => {
   it('direction from tp vs entry', () => {
     expect(direction(100, 110)).toBe('long')
     expect(direction(100, 90)).toBe('short')
+  })
+
+  it('slOnLossSide: SL must be below entry for a long, above for a short', () => {
+    expect(slOnLossSide(100, 110, 95)).toBe(true) // long, SL below
+    expect(slOnLossSide(100, 110, 130)).toBe(false) // long, SL above -> wrong side
+    expect(slOnLossSide(0.014544, 0.018, 0.13747)).toBe(false) // the reported bug
+    expect(slOnLossSide(100, 90, 105)).toBe(true) // short, SL above
+    expect(slOnLossSide(100, 90, 95)).toBe(false) // short, SL below -> wrong side
+    expect(slOnLossSide(100, 110, 100)).toBe(false) // SL == entry
   })
 
   it('realizedPnl scales notional by pct move, signed by direction', () => {
