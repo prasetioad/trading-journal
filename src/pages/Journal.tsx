@@ -23,6 +23,7 @@ export default function Journal() {
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<JournalEntry | null>(null)
   const [replaying, setReplaying] = useState<JournalEntry | null>(null)
+  const [lightbox, setLightbox] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
 
@@ -140,10 +141,24 @@ export default function Journal() {
                     <tr key={t.id} className="border-b border-border-soft last:border-0 hover:bg-surface-2/40">
                       <Td className="whitespace-nowrap text-ink-soft">{dateShort(t.created_at)}</Td>
                       <Td>
-                        <div className="font-semibold text-ink">{t.pair}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-semibold text-ink">{t.pair}</span>
+                          {t.screenshot_ref && (
+                            <button
+                              onClick={() => setLightbox(t.screenshot_ref)}
+                              title="Lihat screenshot"
+                              className="text-ink-mute hover:text-ink"
+                            >
+                              ▦
+                            </button>
+                          )}
+                        </div>
                         <div className="text-[11px] text-ink-mute">
                           {t.asset_type} · {t.direction}
                         </div>
+                        {t.setup_tags.length > 0 && (
+                          <div className="mt-0.5 text-[10px] text-ink-mute">{t.setup_tags.join(' · ')}</div>
+                        )}
                         {live != null && (
                           <div className="mt-0.5 flex items-center gap-1 text-[11px]">
                             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
@@ -252,8 +267,8 @@ export default function Journal() {
           <CloseTradeDialog
             trade={closing}
             onCancel={() => setClosing(null)}
-            onConfirm={(exit) => {
-              closeTrade(closing.id, exit)
+            onConfirm={(exit, mistakes) => {
+              closeTrade(closing.id, exit, { mistakes })
               setClosing(null)
             }}
           />
@@ -262,6 +277,10 @@ export default function Journal() {
 
       <Modal open={!!replaying} onClose={() => setReplaying(null)} title="Trade replay" wide>
         {replaying && <ReplayDialog trade={replaying} />}
+      </Modal>
+
+      <Modal open={!!lightbox} onClose={() => setLightbox(null)} title="Screenshot" wide>
+        {lightbox && <img src={lightbox} alt="Screenshot trade" className="max-h-[70vh] w-full rounded-lg object-contain" />}
       </Modal>
     </div>
   )

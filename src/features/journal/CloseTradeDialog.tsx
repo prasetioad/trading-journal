@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import type { JournalEntry } from '../../types'
+import { MISTAKE_TAGS } from '../../types'
 import { outcomeOf, realizedPnl, realizedRR } from '../../lib/finance'
 import { money, rr } from '../../lib/format'
-import { FormRow, NumberInput } from '../../components/ui/form'
+import { FormRow, NumberInput, TagPicker } from '../../components/ui/form'
 import { Badge } from '../../components/ui/primitives'
 
 export function CloseTradeDialog({
@@ -11,10 +12,11 @@ export function CloseTradeDialog({
   onCancel,
 }: {
   trade: JournalEntry
-  onConfirm: (exitPrice: number) => void
+  onConfirm: (exitPrice: number, mistakes: string[]) => void
   onCancel: () => void
 }) {
   const [exit, setExit] = useState<number | ''>('')
+  const [mistakes, setMistakes] = useState<string[]>(trade.mistakes)
   const preview =
     exit === ''
       ? null
@@ -29,7 +31,7 @@ export function CloseTradeDialog({
       onSubmit={(e) => {
         e.preventDefault()
         if (exit === '') return
-        onConfirm(Number(exit))
+        onConfirm(Number(exit), mistakes)
       }}
       className="space-y-4"
     >
@@ -56,6 +58,10 @@ export function CloseTradeDialog({
           Pakai SL
         </button>
       </div>
+
+      <FormRow label="Kesalahan eksekusi (opsional)" hint="Dipakai engine perilaku & discipline score">
+        <TagPicker value={mistakes} onChange={setMistakes} suggestions={MISTAKE_TAGS} />
+      </FormRow>
 
       {preview && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border-soft bg-surface-2/50 px-3 py-2.5 text-xs">
