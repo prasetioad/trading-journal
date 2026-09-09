@@ -97,11 +97,21 @@ Bukan skema baru — **ALTER** skema yang ada.
 - [x] Hook opsional ke AI bila key tersedia (fallback: parser).
 - **Acceptance:** "BTC breakout london risk < 1.5% 6 bulan terakhir" ter-parse jadi filter benar.
 
-### A8 — Trade replay  ✅
-- [x] `src/lib/binance.ts`: `fetchKlines(pair, interval, start, end)` via `data-api.binance.vision` (CORS-ok).
-- [x] `src/features/journal/ReplayDialog.tsx`: candlestick SVG jendela sekitar entry + garis entry/SL/TP + outcome.
-- [x] Tombol "Replay" di baris jurnal (crypto only; stock → pesan "butuh data OHLC IDX").
-- **Acceptance:** replay BTCUSDT trade seed menampilkan candle + level.
+### A8 — Trade replay  ❌ DIBATALKAN (2026-09-09)
+Dihapus atas permintaan — bukan prioritas untuk tujuan "lihat pola perilaku".
+`fetchKlines` / `ReplayDialog` dihapus; `binance.ts` kini hanya `fetchSpotSymbols()`
+untuk pair picker (A11).
+
+### A11 — Journal editable + pair picker + pattern view  ✅
+- [x] `store.updateTrade(id, patch)` — edit field apa pun; `direction` & (jika closed)
+  `realized_pnl/rr/outcome` dihitung ulang otomatis.
+- [x] `JournalForm` mode edit (`initial`) + `Combobox` searchable + `src/lib/pairs.ts`
+  (kurasi ~70 pair + live Binance `exchangeInfo`, cache 24 jam) untuk pair crypto
+  di form jurnal & analisa.
+- [x] List jurnal jadi **pattern view**: strip ringkas, kolom Sinyal (discipline
+  per-trade + chip revenge/risk-creep/overtrade/late-entry/cut-cepat), sesi +
+  market condition per baris, sort by discipline/PL/RR/confidence, toggle
+  "kelompokkan per hari" (menandai tilt day).
 
 ### A9 — Screenshot upload (prototype)  ✅
 - [x] `JournalForm`: input file → simpan sebagai data-URL di `screenshot_ref`

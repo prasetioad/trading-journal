@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
   AssetType,
   Currency,
+  JournalEntry,
   MarketCondition,
   Psychology,
   Strategy,
@@ -10,6 +11,7 @@ import { MARKET_CONDITIONS, MISTAKE_TAGS, PSYCHOLOGY, SETUP_TAGS } from '../../t
 import { direction, plannedRR } from '../../lib/finance'
 import { rr } from '../../lib/format'
 import { putScreenshot } from '../../lib/storage'
+import { CRYPTO_PAIRS, loadCryptoPairs } from '../../lib/pairs'
 import {
   Fieldset,
   FormRow,
@@ -21,6 +23,7 @@ import {
   TextInput,
   Toggle,
 } from '../../components/ui/form'
+import { Combobox } from '../../components/ui/Combobox'
 import { Badge } from '../../components/ui/primitives'
 
 export interface TradeDraft {
@@ -54,34 +57,53 @@ function toLocalInput(iso: string) {
 
 export function JournalForm({
   strategies,
+  initial,
   onSubmit,
   onCancel,
 }: {
   strategies: Strategy[]
+  /** present → edit mode: prefill every field, relabel the submit button */
+  initial?: JournalEntry
   onSubmit: (d: TradeDraft) => void
   onCancel: () => void
 }) {
-  const [asset, setAsset] = useState<AssetType>('crypto')
-  const [pair, setPair] = useState('')
-  const [strategyId, setStrategyId] = useState<string>(strategies[0]?.id ?? '')
-  const [followed, setFollowed] = useState(true)
-  const [size, setSize] = useState<number | ''>('')
-  const [currency, setCurrency] = useState<Currency>('USD')
-  const [entry, setEntry] = useState<number | ''>('')
-  const [plannedEntry, setPlannedEntry] = useState<number | ''>('')
-  const [tp, setTp] = useState<number | ''>('')
-  const [sl, setSl] = useState<number | ''>('')
-  const [psychology, setPsychology] = useState<Psychology>('Netral')
-  const [reasoning, setReasoning] = useState('')
-  const [entryAt, setEntryAt] = useState<string>(() => toLocalInput(new Date().toISOString()))
-  const [setupTags, setSetupTags] = useState<string[]>([])
-  const [marketCondition, setMarketCondition] = useState<MarketCondition | ''>('')
-  const [confidence, setConfidence] = useState<number>(6)
-  const [riskPct, setRiskPct] = useState<number | ''>('')
-  const [mistakes, setMistakes] = useState<string[]>([])
-  const [shot, setShot] = useState<string | null>(null)
+  const edit = !!initial
+  const [asset, setAsset] = useState<AssetType>(initial?.asset_type ?? 'crypto')
+  const [pair, setPair] = useState(initial?.pair ?? '')
+  const [strategyId, setStrategyId] = useState<string>(
+    initial ? (initial.strategy_id ?? '') : (strategies[0]?.id ?? ''),
+  )
+  const [followed, setFollowed] = useState(initial?.followed_plan ?? true)
+  const [size, setSize] = useState<number | ''>(initial?.size_amount ?? '')
+  const [currency, setCurrency] = useState<Currency>(initial?.size_currency ?? 'USD')
+  const [entry, setEntry] = useState<number | ''>(initial?.entry_price ?? '')
+  const [plannedEntry, setPlannedEntry] = useState<number | ''>(initial?.planned_entry ?? '')
+  const [tp, setTp] = useState<number | ''>(initial?.take_profit ?? '')
+  const [sl, setSl] = useState<number | ''>(initial?.stop_loss ?? '')
+  const [psychology, setPsychology] = useState<Psychology>(initial?.psychology ?? 'Netral')
+  const [reasoning, setReasoning] = useState(initial?.reasoning ?? '')
+  const [entryAt, setEntryAt] = useState<string>(
+    toLocalInput(initial?.entry_at ?? new Date().toISOString()),
+  )
+  const [setupTags, setSetupTags] = useState<string[]>(initial?.setup_tags ?? [])
+  const [marketCondition, setMarketCondition] = useState<MarketCondition | ''>(
+    initial?.market_condition ?? '',
+  )
+  const [confidence, setConfidence] = useState<number>(initial?.confidence ?? 6)
+  const [riskPct, setRiskPct] = useState<number | ''>(initial?.risk_pct ?? '')
+  const [mistakes, setMistakes] = useState<string[]>(initial?.mistakes ?? [])
+  const [shot, setShot] = useState<string | null>(initial?.screenshot_ref ?? null)
   const [shotBusy, setShotBusy] = useState(false)
   const [shotErr, setShotErr] = useState<string | null>(null)
+
+  const [cryptoPairs, setCryptoPairs] = useState<string[]>(CRYPTO_PAIRS)
+  useEffect(() => {
+    let live = true
+    loadCryptoPairs().then((p) => live && setCryptoPairs(p))
+    return () => {
+      live = false
+    }
+  }, [])
 
   const prr = useMemo(() => {
     if (entry === '' || tp === '' || sl === '') return null
@@ -153,7 +175,7 @@ export function JournalForm({
             value={asset}
             onChange={(v) => {
               setAsset(v)
-              setCurrency(v === 'stock' ? 'IDR' : 'USD')
+              if (!edit) setCurrency(v === 'stock' ? 'IDR' : 'USD')
             }}
             options={[
               { value: 'crypto', label: 'Crypto' },
@@ -161,18 +183,31 @@ export function JournalForm({
             ]}
           />
         </FormRow>
-        <FormRow label="Pair" hint={asset === 'crypto' ? 'Mis. BTCUSDT' : 'Mis. BBCA'}>
-          <TextInput
-            value={pair}
-            onChange={(e) => setPair(e.target.value)}
-            placeholder={asset === 'crypto' ? 'BTCUSDT' : 'BBCA'}
-            autoFocus
-          />
+        <FormRow
+          label="Pair"
+          hint={asset === 'crypto' ? 'Ketik untuk cari — dari daftar Binance' : 'Mis. BBCA'}
+        >
+          {asset === 'crypto' ? (
+            <Combobox
+              value={pair}
+              onChange={setPair}
+              options={cryptoPairs}
+              placeholder="BTCUSDT"
+              autoFocus={!edit}
+            />
+          ) : (
+            <TextInput
+              value={pair}
+              onChange={(e) => setPair(e.target.value)}
+              placeholder="BBCA"
+              autoFocus={!edit}
+            />
+          )}
         </FormRow>
       </Fieldset>
 
       <Fieldset>
-        <FormRow label="Strategi" hint="Dipilih dari Playbook">
+        <FormRow label="Strategi" hint="Dipilih dari Playbook — bisa diubah kapan saja">
           <Select value={strategyId} onChange={(e) => setStrategyId(e.target.value)}>
             <option value="">Tanpa Strategi / Eksperimen</option>
             {strategies.map((s) => (
@@ -275,7 +310,7 @@ export function JournalForm({
         )}
       </div>
 
-      <FormRow label="Alasan & Catatan" hint="Catatan teknikal bebas — dibaca oleh AI harian">
+      <FormRow label="Alasan & Catatan" hint="Catatan teknikal bebas — dibaca AI harian & analitik 'per alasan'">
         <TextArea
           value={reasoning}
           onChange={(e) => setReasoning(e.target.value)}
@@ -284,7 +319,7 @@ export function JournalForm({
       </FormRow>
 
       <Fieldset>
-        <FormRow label="Kesalahan eksekusi" hint="Opsional saat entry — bisa dilengkapi saat close">
+        <FormRow label="Kesalahan eksekusi" hint="Opsional — bisa dilengkapi saat/ setelah close">
           <TagPicker value={mistakes} onChange={setMistakes} suggestions={MISTAKE_TAGS} />
         </FormRow>
         <FormRow label="Screenshot" hint="Otomatis di-resize & dikompres">
@@ -312,7 +347,7 @@ export function JournalForm({
           Batal
         </button>
         <button type="submit" className="btn btn-primary" disabled={!valid}>
-          Simpan trade (Open)
+          {edit ? 'Simpan perubahan' : 'Simpan trade (Open)'}
         </button>
       </div>
     </form>

@@ -49,6 +49,23 @@ export function outcomeOf(pnl: number): 'win' | 'lose' | 'breakeven' {
   return 'breakeven'
 }
 
+/**
+ * Merge an edit into a trade and keep derived fields consistent:
+ * `direction` from entry/TP, and — if the trade is closed with an exit —
+ * `realized_pnl` / `realized_rr` / `outcome` recomputed from the new prices.
+ */
+export function applyTradeEdit(t: JournalEntry, patch: Partial<JournalEntry>): JournalEntry {
+  const m: JournalEntry = { ...t, ...patch }
+  m.direction = direction(m.entry_price, m.take_profit)
+  if (m.status === 'closed' && m.exit_price != null) {
+    const pnl = realizedPnl(m, m.exit_price)
+    m.realized_pnl = pnl
+    m.realized_rr = realizedRR(m, m.exit_price)
+    m.outcome = outcomeOf(pnl)
+  }
+  return m
+}
+
 // ---------- Strategy aggregate metrics (Strategy League Table) ----------
 
 export interface StrategyStats {

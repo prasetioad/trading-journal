@@ -5,6 +5,7 @@ import {
   realizedRR,
   direction,
   outcomeOf,
+  applyTradeEdit,
   strategyStats,
   disciplineSummary,
   leakSummary,
@@ -43,6 +44,36 @@ describe('primitives', () => {
     expect(outcomeOf(5)).toBe('win')
     expect(outcomeOf(-5)).toBe('lose')
     expect(outcomeOf(0)).toBe('breakeven')
+  })
+})
+
+describe('applyTradeEdit', () => {
+  it('edits reason/strategy without touching numbers', () => {
+    const t = trade({ strategy_id: 'a', reasoning: 'salah', entry_at: AT, exit: 110 })
+    const e = applyTradeEdit(t, { strategy_id: 'b', reasoning: 'retest + volume' })
+    expect(e.strategy_id).toBe('b')
+    expect(e.reasoning).toBe('retest + volume')
+    expect(e.realized_pnl).toBe(t.realized_pnl)
+  })
+
+  it('recomputes direction + realized figures when prices change on a closed trade', () => {
+    // originally long 100->110 (+10%); edit entry/tp so it becomes a short and move exit
+    const t = trade({ entry: 100, tp: 110, sl: 90, size: 1000, entry_at: AT, exit: 110 })
+    const e = applyTradeEdit(t, { entry_price: 100, take_profit: 90, stop_loss: 110, exit_price: 95 })
+    expect(e.direction).toBe('short')
+    // short: (95-100)/100 * -1 * 1000 = +50
+    expect(e.realized_pnl).toBe(50)
+    expect(e.outcome).toBe('win')
+    // realized R: reward (95-100)*-1 = 5 over risk |100-110| = 10 -> 0.5
+    expect(e.realized_rr).toBe(0.5)
+  })
+
+  it('leaves an open trade unchanged except direction', () => {
+    const t = trade({ entry: 100, tp: 120, sl: 90, entry_at: AT }) // open
+    const e = applyTradeEdit(t, { take_profit: 80 })
+    expect(e.direction).toBe('short')
+    expect(e.realized_pnl).toBeNull()
+    expect(e.status).toBe('open')
   })
 })
 

@@ -52,9 +52,10 @@ Opsional: salin `.env.example` → `.env.local` untuk mengaktifkan Supabase / Cl
 | A5 · **Trading Plan** module — plan harian + Plan vs Actual | ✅ |
 | A6 · Dashboard — Trading Calendar + Streak/Drawdown | ✅ |
 | A7 · Natural-language journal search (`lib/search.ts`) | ✅ |
-| A8 · Trade replay — Binance klines candlestick + playback | ✅ |
+| A8 · Trade replay | ❌ dibatalkan |
 | A9 · Screenshot upload (client compress) + lightbox | ✅ |
 | A10 · CSV import | ✅ |
+| A11 · Journal editable (`updateTrade`) + searchable crypto pair picker + pattern-view list (per-trade discipline, behavior chips, sessions, sort, group-by-day) | ✅ |
 
 **Track B (butuh kredensial user):** flip ke Supabase + Auth/RLS, screenshot →
 Storage, deploy Edge Function `ai-daily`, provider data IDX. Lihat
@@ -82,7 +83,8 @@ src/
     search.ts              Parser natural-language → filter jurnal
     fx.ts                   Normalisasi multi-currency → IDR untuk agregat portofolio
     verify.ts               Aturan crossing SL/TP & target/invalidation (murni)
-    binance.ts              Live price feed (WS + REST fallback) + fetchKlines (replay)
+    binance.ts              Live price feed (WS + REST fallback) + fetchSpotSymbols
+    pairs.ts                Crypto pair list (curated + live Binance, cached) for the picker
     storage.ts             Screenshot: compress client → data URL (seam ke Supabase Storage)
     csv.ts                  Export + import CSV jurnal & analisa
     ai/prompt.ts            Prompt batch harian (dependency-free, dishare ke Edge Fn)

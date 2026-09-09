@@ -1,32 +1,52 @@
 import { useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import type { JournalEntry } from '../types'
-import { DESTRUCTIVE_EMOTIONS } from '../types'
+import { DESTRUCTIVE_EMOTIONS, sessionOf } from '../types'
 import { plannedRR } from '../lib/finance'
+import { toIDR } from '../lib/fx'
+import { behaviorFlags, disciplineByTrade, type FlagKind } from '../lib/rules'
 import { dateShort, money, num, pct, rr } from '../lib/format'
 import { unrealized } from '../lib/verify'
 import { usePrices } from '../store/prices'
 import { exportJournalCsv, parseJournalCsv, type ImportedTrade } from '../lib/csv'
 import { runSearch } from '../lib/search'
-import { Badge, Card, EmptyState, SectionTitle } from '../components/ui/primitives'
+import { Badge, Card, EmptyState, SectionTitle, StatTile } from '../components/ui/primitives'
 import { Modal } from '../components/ui/Modal'
 import { JournalForm } from '../features/journal/JournalForm'
 import { CloseTradeDialog } from '../features/journal/CloseTradeDialog'
-import { ReplayDialog } from '../features/journal/ReplayDialog'
-import { isCryptoPair } from '../lib/verify'
 
 type Filter = 'all' | 'open' | 'closed'
+type Sort = 'date' | 'discipline' | 'pnl' | 'rr' | 'confidence'
+
+const FLAG_META: Record<FlagKind, { short: string; tone: 'lose' | 'warn' | 'info' | 'neutral' }> = {
+  revenge: { short: 'Revenge', tone: 'lose' },
+  'risk-creep': { short: 'Risk creep', tone: 'warn' },
+  overtrading: { short: 'Overtrade', tone: 'warn' },
+  'late-entry': { short: 'Late entry', tone: 'info' },
+  'cut-profit-early': { short: 'Cut cepat', tone: 'neutral' },
+}
 
 export default function Journal() {
-  const { journal, strategies, addTrade, addTrades, closeTrade, reopenTrade, deleteTrade } = useStore()
+  const {
+    journal,
+    strategies,
+    addTrade,
+    addTrades,
+    updateTrade,
+    closeTrade,
+    reopenTrade,
+    deleteTrade,
+  } = useStore()
   const { prices } = usePrices()
   const fileRef = useRef<HTMLInputElement>(null)
   const [importPreview, setImportPreview] = useState<{ rows: ImportedTrade[]; errors: string[] } | null>(null)
   const [creating, setCreating] = useState(false)
+  const [editing, setEditing] = useState<JournalEntry | null>(null)
   const [closing, setClosing] = useState<JournalEntry | null>(null)
-  const [replaying, setReplaying] = useState<JournalEntry | null>(null)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [sort, setSort] = useState<Sort>('date')
+  const [groupByDay, setGroupByDay] = useState(false)
   const [query, setQuery] = useState('')
 
   const stratName = useMemo(() => {
@@ -34,27 +54,92 @@ export default function Journal() {
     return (id: string | null) => (id ? (m.get(id) ?? 'Strategi dihapus') : 'Tanpa Strategi')
   }, [strategies])
 
+  // discipline + behavior flags are computed over the WHOLE journal (context matters)
+  const disc = useMemo(() => disciplineByTrade(journal), [journal])
+  const flagsByTrade = useMemo(() => {
+    const m = new Map<string, FlagKind[]>()
+    for (const f of behaviorFlags(journal)) {
+      const arr = m.get(f.tradeId) ?? []
+      if (!arr.includes(f.kind)) arr.push(f.kind)
+      m.set(f.tradeId, arr)
+    }
+    return m
+  }, [journal])
+
   const search = useMemo(
     () => (query.trim() ? runSearch(journal, strategies, query) : null),
     [journal, strategies, query],
   )
 
   const rows = useMemo(() => {
-    const base = search ? search.trades : journal
-    const sorted = [...base].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    )
-    if (filter === 'all') return sorted
-    return sorted.filter((t) => t.status === filter)
-  }, [journal, filter, search])
+    let base = search ? search.trades : journal
+    if (filter !== 'all') base = base.filter((t) => t.status === filter)
+    const s = [...base]
+    const pnl = (t: JournalEntry) => toIDR(t.realized_pnl, t.size_currency)
+    s.sort((a, b) => {
+      switch (sort) {
+        case 'discipline':
+          return (disc.get(a.id)?.score ?? 100) - (disc.get(b.id)?.score ?? 100)
+        case 'pnl':
+          return pnl(b) - pnl(a)
+        case 'rr':
+          return (b.realized_rr ?? -Infinity) - (a.realized_rr ?? -Infinity)
+        case 'confidence':
+          return (b.confidence ?? 0) - (a.confidence ?? 0)
+        default:
+          return new Date(b.entry_at).getTime() - new Date(a.entry_at).getTime()
+      }
+    })
+    return s
+  }, [journal, filter, sort, search, disc])
 
-  const openCount = journal.filter((t) => t.status === 'open').length
+  const summary = useMemo(() => {
+    const closed = rows.filter((t) => t.status === 'closed')
+    const pnl = (t: JournalEntry) => toIDR(t.realized_pnl, t.size_currency)
+    const wins = closed.filter((t) => pnl(t) > 0)
+    const losses = closed.filter((t) => pnl(t) < 0)
+    const sumWin = wins.reduce((x, t) => x + pnl(t), 0)
+    const sumLoss = Math.abs(losses.reduce((x, t) => x + pnl(t), 0))
+    const wr = closed.length ? wins.length / closed.length : 0
+    const lr = closed.length ? losses.length / closed.length : 0
+    const avgWin = wins.length ? sumWin / wins.length : 0
+    const avgLoss = losses.length ? sumLoss / losses.length : 0
+    const discScores = rows.map((t) => disc.get(t.id)?.score ?? 100)
+    const flagged = rows.filter((t) => (flagsByTrade.get(t.id)?.length ?? 0) > 0).length
+    return {
+      total: rows.length,
+      open: rows.filter((t) => t.status === 'open').length,
+      winRate: wr,
+      expectancy: wr * avgWin - lr * avgLoss,
+      netPnl: sumWin - sumLoss,
+      avgDiscipline: discScores.length
+        ? Math.round(discScores.reduce((a, b) => a + b, 0) / discScores.length)
+        : 100,
+      flagged,
+    }
+  }, [rows, disc, flagsByTrade])
+
+  const dayGroups = useMemo(() => {
+    if (!groupByDay) return null
+    const pnl = (t: JournalEntry) => toIDR(t.realized_pnl, t.size_currency)
+    const map = new Map<string, JournalEntry[]>()
+    for (const t of rows) {
+      const k = t.entry_at.slice(0, 10)
+      ;(map.get(k) ?? map.set(k, []).get(k)!).push(t)
+    }
+    return [...map.entries()].map(([date, list]) => {
+      const net = list.reduce((s, t) => s + pnl(t), 0)
+      const revenge = list.some((t) => flagsByTrade.get(t.id)?.includes('revenge'))
+      const tilt = list.length >= 4 || revenge
+      return { date, list, net, tilt }
+    })
+  }, [rows, groupByDay, flagsByTrade])
 
   return (
     <div>
       <SectionTitle
         title="Trading Journal"
-        hint="Catat setiap entry beserta emosi & kepatuhan SOP. R:R dihitung otomatis."
+        hint="Catat, edit, dan lihat pola eksekusimu. Sinyal perilaku & skor disiplin dihitung otomatis."
         right={
           <div className="flex gap-2">
             <input
@@ -93,38 +178,77 @@ export default function Journal() {
           placeholder='Cari natural language — mis. "BTC breakout london risk < 1.5% 6 bulan terakhir"'
         />
         {search && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border-soft bg-surface-2/50 px-3 py-2 text-xs">
-            <span className="text-ink-soft">
-              {search.parsed.criteria.length
-                ? search.parsed.criteria.join(' · ')
-                : 'query tidak dikenali — menampilkan semua'}
-            </span>
-            <span className="ml-auto flex gap-3 text-ink-mute">
-              <span className="tnum">{search.stats.count} trade</span>
-              <span className="tnum">WR {pct(search.stats.winRate)}</span>
-              <span className={`tnum ${search.stats.expectancy >= 0 ? 'text-win' : 'text-lose'}`}>
-                Exp {money(search.stats.expectancy, 'IDR', { sign: true })}
-              </span>
-              <span className={`tnum ${search.stats.netPnl >= 0 ? 'text-win' : 'text-lose'}`}>
-                Net {money(search.stats.netPnl, 'IDR', { sign: true })}
-              </span>
-            </span>
+          <div className="mt-2 rounded-lg border border-border-soft bg-surface-2/50 px-3 py-2 text-xs text-ink-soft">
+            {search.parsed.criteria.length
+              ? search.parsed.criteria.join(' · ')
+              : 'query tidak dikenali — menampilkan semua'}
           </div>
         )}
       </div>
 
-      <div className="mb-3 flex gap-1">
-        {(['all', 'open', 'closed'] as Filter[]).map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-              filter === f ? 'bg-brand/12 text-brand' : 'bg-surface-2 text-ink-soft hover:text-ink'
-            }`}
+      {/* pattern summary — over the currently visible rows */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatTile label="Trade tampil" value={num(summary.total, 0)} delta={`${summary.open} open`} />
+        <StatTile label="Win Rate" value={pct(summary.winRate)} />
+        <StatTile
+          label="Expectancy"
+          value={money(summary.expectancy, 'IDR', { sign: true })}
+          tone={summary.expectancy >= 0 ? 'win' : 'lose'}
+        />
+        <StatTile
+          label="Net P/L"
+          value={money(summary.netPnl, 'IDR', { sign: true })}
+          tone={summary.netPnl >= 0 ? 'win' : 'lose'}
+        />
+        <StatTile
+          label="Avg Discipline"
+          value={`${summary.avgDiscipline}%`}
+          tone={summary.avgDiscipline >= 75 ? 'win' : summary.avgDiscipline >= 50 ? 'warn' : 'lose'}
+        />
+        <StatTile
+          label="Ada sinyal perilaku"
+          value={num(summary.flagged, 0)}
+          tone={summary.flagged > 0 ? 'warn' : 'neutral'}
+        />
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="flex gap-1">
+          {(['all', 'open', 'closed'] as Filter[]).map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                filter === f ? 'bg-brand/12 text-brand' : 'bg-surface-2 text-ink-soft hover:text-ink'
+              }`}
+            >
+              {f === 'all' ? 'Semua' : f === 'open' ? `Open (${summary.open})` : 'Closed'}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+          Urut:
+          <select
+            className="field !w-auto !py-1 text-xs"
+            value={sort}
+            onChange={(e) => setSort(e.target.value as Sort)}
           >
-            {f === 'all' ? 'Semua' : f === 'open' ? `Open (${openCount})` : 'Closed'}
-          </button>
-        ))}
+            <option value="date">Tanggal (terbaru)</option>
+            <option value="discipline">Discipline (terburuk dulu)</option>
+            <option value="pnl">Realized P/L</option>
+            <option value="rr">Realized R:R</option>
+            <option value="confidence">Confidence</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-ink-soft">
+          <input
+            type="checkbox"
+            checked={groupByDay}
+            onChange={(e) => setGroupByDay(e.target.checked)}
+            className="accent-[var(--color-brand)]"
+          />
+          Kelompokkan per hari
+        </label>
       </div>
 
       {rows.length === 0 ? (
@@ -132,136 +256,76 @@ export default function Journal() {
       ) : (
         <Card pad={false} className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-[13px]">
+            <table className="w-full min-w-[1000px] text-left text-[13px]">
               <thead className="border-b border-border text-[11px] uppercase tracking-wide text-ink-mute">
                 <tr>
-                  <Th>Tanggal</Th>
+                  <Th>Waktu</Th>
                   <Th>Pair</Th>
-                  <Th>Strategi</Th>
-                  <Th>SOP</Th>
-                  <Th>Psikologi</Th>
-                  <Th right>Planned R:R</Th>
-                  <Th right>Realized R:R</Th>
+                  <Th>Strategi / konteks</Th>
+                  <Th>Eksekusi</Th>
+                  <Th>Sinyal</Th>
+                  <Th right>P R:R</Th>
+                  <Th right>R R:R</Th>
                   <Th right>Realized P/L</Th>
                   <Th>Status</Th>
                   <Th right>Aksi</Th>
                 </tr>
               </thead>
-              <tbody>
-                {rows.map((t) => {
-                  const prr = plannedRR(t.entry_price, t.take_profit, t.stop_loss)
-                  const leak = DESTRUCTIVE_EMOTIONS.includes(t.psychology)
-                  const live = t.status === 'open' ? prices[t.pair] : undefined
-                  const uPnl = live != null ? unrealized(t, live) : null
-                  return (
-                    <tr key={t.id} className="border-b border-border-soft last:border-0 hover:bg-surface-2/40">
-                      <Td className="whitespace-nowrap text-ink-soft">{dateShort(t.created_at)}</Td>
-                      <Td>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-semibold text-ink">{t.pair}</span>
-                          {t.screenshot_ref && (
-                            <button
-                              onClick={() => setLightbox(t.screenshot_ref)}
-                              title="Lihat screenshot"
-                              className="text-ink-mute hover:text-ink"
-                            >
-                              ▦
-                            </button>
-                          )}
-                        </div>
-                        <div className="text-[11px] text-ink-mute">
-                          {t.asset_type} · {t.direction}
-                        </div>
-                        {t.setup_tags.length > 0 && (
-                          <div className="mt-0.5 text-[10px] text-ink-mute">{t.setup_tags.join(' · ')}</div>
+              {groupByDay && dayGroups ? (
+                dayGroups.map((g) => (
+                  <tbody key={g.date}>
+                    <tr className="bg-surface-2/60">
+                      <td colSpan={10} className="px-3 py-1.5 text-[11px]">
+                        <span className="font-semibold text-ink">{g.date}</span>
+                        <span className="ml-3 text-ink-mute">{g.list.length} trade</span>
+                        <span
+                          className={`ml-3 tnum font-semibold ${g.net >= 0 ? 'text-win' : 'text-lose'}`}
+                        >
+                          {money(g.net, 'IDR', { sign: true })}
+                        </span>
+                        {g.tilt && (
+                          <Badge tone="lose" className="ml-3">
+                            Kemungkinan tilt day
+                          </Badge>
                         )}
-                        {live != null && (
-                          <div className="mt-0.5 flex items-center gap-1 text-[11px]">
-                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
-                            <span className="tnum text-brand">{num(live, 8)}</span>
-                          </div>
-                        )}
-                      </Td>
-                      <Td className="text-ink-soft">{stratName(t.strategy_id)}</Td>
-                      <Td>
-                        {t.followed_plan ? (
-                          <Badge tone="brand">Sesuai</Badge>
-                        ) : (
-                          <Badge tone="lose">Melanggar</Badge>
-                        )}
-                      </Td>
-                      <Td>
-                        <span className={leak ? 'text-lose' : 'text-ink-soft'}>{t.psychology}</span>
-                      </Td>
-                      <Td right className="tnum text-ink-soft">
-                        {rr(prr)}
-                      </Td>
-                      <Td right className="tnum text-ink-soft">
-                        {rr(t.realized_rr)}
-                      </Td>
-                      <Td right className="tnum">
-                        {t.realized_pnl != null ? (
-                          <span className={t.realized_pnl >= 0 ? 'text-win' : 'text-lose'}>
-                            {money(t.realized_pnl, t.size_currency, { sign: true })}
-                          </span>
-                        ) : uPnl != null ? (
-                          <span
-                            className={uPnl >= 0 ? 'text-win/80' : 'text-lose/80'}
-                            title="Unrealized (live)"
-                          >
-                            ~{money(uPnl, t.size_currency, { sign: true })}
-                          </span>
-                        ) : (
-                          <span className="text-ink-mute">—</span>
-                        )}
-                      </Td>
-                      <Td>
-                        {t.status === 'open' ? (
-                          <Badge tone="warn">Open</Badge>
-                        ) : t.outcome === 'win' ? (
-                          <Badge tone="win">Win</Badge>
-                        ) : t.outcome === 'lose' ? (
-                          <Badge tone="lose">Lose</Badge>
-                        ) : (
-                          <Badge tone="neutral">Breakeven</Badge>
-                        )}
-                      </Td>
-                      <Td right>
-                        <div className="flex justify-end gap-1">
-                          {isCryptoPair(t.pair) && (
-                            <button
-                              className="btn btn-ghost px-2 py-1 text-[11px]"
-                              onClick={() => setReplaying(t)}
-                            >
-                              Replay
-                            </button>
-                          )}
-                          {t.status === 'open' ? (
-                            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setClosing(t)}>
-                              Tutup
-                            </button>
-                          ) : (
-                            <button
-                              className="btn btn-ghost px-2 py-1 text-[11px]"
-                              onClick={() => reopenTrade(t.id)}
-                            >
-                              Buka lagi
-                            </button>
-                          )}
-                          <button
-                            className="btn btn-danger px-2 py-1 text-[11px]"
-                            onClick={() => {
-                              if (confirm('Hapus trade ini?')) deleteTrade(t.id)
-                            }}
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </Td>
+                      </td>
                     </tr>
-                  )
-                })}
-              </tbody>
+                    {g.list.map((t) => (
+                      <Row
+                        key={t.id}
+                        t={t}
+                        stratName={stratName}
+                        price={t.status === 'open' ? prices[t.pair] : undefined}
+                        discipline={disc.get(t.id)?.score ?? 100}
+                        flags={flagsByTrade.get(t.id) ?? []}
+                        onEdit={() => setEditing(t)}
+                        onClose={() => setClosing(t)}
+                        onReopen={() => reopenTrade(t.id)}
+                        onDelete={() => deleteTrade(t.id)}
+                        onShot={() => setLightbox(t.screenshot_ref)}
+                      />
+                    ))}
+                  </tbody>
+                ))
+              ) : (
+                <tbody>
+                  {rows.map((t) => (
+                    <Row
+                      key={t.id}
+                      t={t}
+                      stratName={stratName}
+                      price={t.status === 'open' ? prices[t.pair] : undefined}
+                      discipline={disc.get(t.id)?.score ?? 100}
+                      flags={flagsByTrade.get(t.id) ?? []}
+                      onEdit={() => setEditing(t)}
+                      onClose={() => setClosing(t)}
+                      onReopen={() => reopenTrade(t.id)}
+                      onDelete={() => deleteTrade(t.id)}
+                      onShot={() => setLightbox(t.screenshot_ref)}
+                    />
+                  ))}
+                </tbody>
+              )}
             </table>
           </div>
         </Card>
@@ -278,6 +342,20 @@ export default function Journal() {
         />
       </Modal>
 
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit trade" wide>
+        {editing && (
+          <JournalForm
+            strategies={strategies}
+            initial={editing}
+            onCancel={() => setEditing(null)}
+            onSubmit={(d) => {
+              updateTrade(editing.id, d)
+              setEditing(null)
+            }}
+          />
+        )}
+      </Modal>
+
       <Modal open={!!closing} onClose={() => setClosing(null)} title="Tutup posisi">
         {closing && (
           <CloseTradeDialog
@@ -289,10 +367,6 @@ export default function Journal() {
             }}
           />
         )}
-      </Modal>
-
-      <Modal open={!!replaying} onClose={() => setReplaying(null)} title="Trade replay" wide>
-        {replaying && <ReplayDialog trade={replaying} />}
       </Modal>
 
       <Modal open={!!lightbox} onClose={() => setLightbox(null)} title="Screenshot" wide>
@@ -344,6 +418,170 @@ export default function Journal() {
         )}
       </Modal>
     </div>
+  )
+}
+
+function Row({
+  t,
+  stratName,
+  price,
+  discipline,
+  flags,
+  onEdit,
+  onClose,
+  onReopen,
+  onDelete,
+  onShot,
+}: {
+  t: JournalEntry
+  stratName: (id: string | null) => string
+  price: number | undefined
+  discipline: number
+  flags: FlagKind[]
+  onEdit: () => void
+  onClose: () => void
+  onReopen: () => void
+  onDelete: () => void
+  onShot: () => void
+}) {
+  const prr = plannedRR(t.entry_price, t.take_profit, t.stop_loss)
+  const leak = DESTRUCTIVE_EMOTIONS.includes(t.psychology)
+  const uPnl = price != null ? unrealized(t, price) : null
+  const discTone =
+    discipline >= 80 ? 'text-win' : discipline >= 50 ? 'text-warn' : 'text-lose'
+
+  return (
+    <tr className="border-b border-border-soft last:border-0 hover:bg-surface-2/40">
+      <Td className="whitespace-nowrap text-ink-soft">
+        <div>{dateShort(t.entry_at)}</div>
+        <div className="text-[10px] text-ink-mute">
+          {new Date(t.entry_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} ·{' '}
+          {sessionOf(t.entry_at)}
+        </div>
+      </Td>
+
+      <Td>
+        <div className="flex items-center gap-1.5">
+          <span className="font-semibold text-ink">{t.pair}</span>
+          {t.screenshot_ref && (
+            <button onClick={onShot} title="Lihat screenshot" className="text-ink-mute hover:text-ink">
+              ▦
+            </button>
+          )}
+        </div>
+        <div className="text-[11px] text-ink-mute">
+          {t.asset_type} · {t.direction}
+          {t.confidence != null && ` · conf ${t.confidence}`}
+        </div>
+        {t.setup_tags.length > 0 && (
+          <div className="mt-0.5 text-[10px] text-ink-mute">{t.setup_tags.join(' · ')}</div>
+        )}
+        {price != null && (
+          <div className="mt-0.5 flex items-center gap-1 text-[11px]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+            <span className="tnum text-brand">{num(price, 8)}</span>
+          </div>
+        )}
+      </Td>
+
+      <Td className="text-ink-soft">
+        <div>{stratName(t.strategy_id)}</div>
+        <div className="mt-0.5 text-[10px] text-ink-mute">
+          {t.market_condition ?? 'kondisi —'}
+          {t.risk_pct != null && ` · risk ${t.risk_pct}%`}
+        </div>
+      </Td>
+
+      <Td>
+        <div className="flex flex-col gap-1">
+          {t.followed_plan ? (
+            <Badge tone="brand">SOP</Badge>
+          ) : (
+            <Badge tone="lose">Langgar SOP</Badge>
+          )}
+          <span className={`text-[11px] ${leak ? 'text-lose' : 'text-ink-soft'}`}>{t.psychology}</span>
+          {t.mistakes.length > 0 && (
+            <span className="text-[10px] text-lose/80">{t.mistakes.join(', ')}</span>
+          )}
+        </div>
+      </Td>
+
+      <Td>
+        <div className="flex flex-col items-start gap-1">
+          <span className={`tnum text-[12px] font-semibold ${discTone}`} title="Discipline score trade ini">
+            {discipline}%
+          </span>
+          {flags.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {flags.map((f) => (
+                <Badge key={f} tone={FLAG_META[f].tone}>
+                  {FLAG_META[f].short}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="text-[10px] text-ink-mute">bersih</span>
+          )}
+        </div>
+      </Td>
+
+      <Td right className="tnum text-ink-soft">
+        {rr(prr)}
+      </Td>
+      <Td right className="tnum text-ink-soft">
+        {rr(t.realized_rr)}
+      </Td>
+      <Td right className="tnum">
+        {t.realized_pnl != null ? (
+          <span className={t.realized_pnl >= 0 ? 'text-win' : 'text-lose'}>
+            {money(t.realized_pnl, t.size_currency, { sign: true })}
+          </span>
+        ) : uPnl != null ? (
+          <span className={uPnl >= 0 ? 'text-win/80' : 'text-lose/80'} title="Unrealized (live)">
+            ~{money(uPnl, t.size_currency, { sign: true })}
+          </span>
+        ) : (
+          <span className="text-ink-mute">—</span>
+        )}
+      </Td>
+
+      <Td>
+        {t.status === 'open' ? (
+          <Badge tone="warn">Open</Badge>
+        ) : t.outcome === 'win' ? (
+          <Badge tone="win">Win</Badge>
+        ) : t.outcome === 'lose' ? (
+          <Badge tone="lose">Lose</Badge>
+        ) : (
+          <Badge tone="neutral">Breakeven</Badge>
+        )}
+      </Td>
+
+      <Td right>
+        <div className="flex flex-wrap justify-end gap-1">
+          <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={onEdit}>
+            Edit
+          </button>
+          {t.status === 'open' ? (
+            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={onClose}>
+              Tutup
+            </button>
+          ) : (
+            <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={onReopen}>
+              Buka lagi
+            </button>
+          )}
+          <button
+            className="btn btn-danger px-2 py-1 text-[11px]"
+            onClick={() => {
+              if (confirm('Hapus trade ini?')) onDelete()
+            }}
+          >
+            ✕
+          </button>
+        </div>
+      </Td>
+    </tr>
   )
 }
 

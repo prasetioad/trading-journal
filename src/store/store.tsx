@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, useState, type ReactNode } from 're
 import type { Analysis, JournalEntry, Strategy, TradingPlan } from '../types'
 import { repository, type DB } from './repository'
 import { uid } from '../lib/format'
-import { direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
+import { applyTradeEdit, direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
 
 type StrategyInput = Pick<Strategy, 'name' | 'description' | 'target_sample_size' | 'status'>
 type JournalInput = Omit<
@@ -37,6 +37,7 @@ interface StoreValue {
   // journal
   addTrade: (t: JournalInput) => void
   addTrades: (ts: JournalInput[]) => void
+  updateTrade: (id: string, patch: Partial<JournalEntry>) => void
   closeTrade: (id: string, exitPrice: number, extra?: { mistakes?: string[] }) => void
   reopenTrade: (id: string) => void
   deleteTrade: (id: string) => void
@@ -119,6 +120,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       addTrades: (ts) =>
         commit({ ...db, journal: [...ts.map(mkTrade), ...db.journal] }),
+
+      updateTrade: (id, patch) =>
+        commit({
+          ...db,
+          journal: db.journal.map((t) => (t.id === id ? applyTradeEdit(t, patch) : t)),
+        }),
 
       closeTrade: (id, exitPrice, extra) =>
         commit({

@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { AnalysisBias, AssetType } from '../../types'
+import { CRYPTO_PAIRS, loadCryptoPairs } from '../../lib/pairs'
 import {
   Fieldset,
   FormRow,
@@ -8,6 +9,7 @@ import {
   TextArea,
   TextInput,
 } from '../../components/ui/form'
+import { Combobox } from '../../components/ui/Combobox'
 
 export interface AnalysisDraft {
   pair: string
@@ -38,6 +40,15 @@ export function AnalysisForm({
   const [tags, setTags] = useState('')
   const [notes, setNotes] = useState('')
 
+  const [cryptoPairs, setCryptoPairs] = useState<string[]>(CRYPTO_PAIRS)
+  useEffect(() => {
+    let live = true
+    loadCryptoPairs().then((p) => live && setCryptoPairs(p))
+    return () => {
+      live = false
+    }
+  }, [])
+
   const valid = pair.trim().length > 0 && target !== '' && invalidation !== ''
 
   return (
@@ -64,7 +75,11 @@ export function AnalysisForm({
     >
       <Fieldset cols={3}>
         <FormRow label="Pair">
-          <TextInput value={pair} onChange={(e) => setPair(e.target.value)} placeholder="BTCUSDT" autoFocus />
+          {asset === 'crypto' ? (
+            <Combobox value={pair} onChange={setPair} options={cryptoPairs} placeholder="BTCUSDT" autoFocus />
+          ) : (
+            <TextInput value={pair} onChange={(e) => setPair(e.target.value)} placeholder="BBCA" autoFocus />
+          )}
         </FormRow>
         <FormRow label="Jenis aset">
           <SegmentedField<AssetType>
