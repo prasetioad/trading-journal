@@ -4,6 +4,8 @@ import {
   byHour,
   bySetupTag,
   byMarketCondition,
+  byReason,
+  reasonKeywords,
   streaks,
   drawdown,
   tradingDNA,
@@ -76,6 +78,48 @@ describe('byMarketCondition', () => {
     ])
     expect(rows[0].key).toBe('Trending')
     expect(rows[rows.length - 1].key).toBe('Ranging')
+  })
+})
+
+describe('byReason', () => {
+  const R = (reasoning: string, over: Parameters<typeof trade>[0]) =>
+    trade({ entry: 100, tp: 110, sl: 90, reasoning, ...over } as Parameters<typeof trade>[0])
+
+  it('reasonKeywords matches the TA lexicon (bilingual)', () => {
+    const k = reasonKeywords('Break weekly resistance, retest bersih, volume ekspansi')
+    expect(k).toContain('Breakout')
+    expect(k).toContain('Retest')
+    expect(k).toContain('Volume')
+    expect(k).toContain('Support/Resistance')
+  })
+
+  it('buckets win rate + expectancy by reason keyword', () => {
+    const j = [
+      R('retest bersih, volume naik', { entry_at: '2026-08-01T08:00:00Z', exit: 110 }),
+      R('retest lagi, konfirmasi H4', { entry_at: '2026-08-02T08:00:00Z', exit: 110 }),
+      R('FOMO takut ketinggalan candle', { entry_at: '2026-08-03T08:00:00Z', exit: 90 }),
+      R('FOMO listing news', { entry_at: '2026-08-04T08:00:00Z', exit: 90 }),
+    ]
+    const rows = byReason(j)
+    const retest = rows.find((r) => r.key === 'Retest')!
+    const fomo = rows.find((r) => r.key === 'FOMO / impulsif')!
+    expect(retest.trades).toBe(2)
+    expect(retest.winRate).toBe(1)
+    expect(fomo.trades).toBe(2)
+    expect(fomo.winRate).toBe(0)
+    // sorted by expectancy desc -> Retest before FOMO
+    expect(rows.findIndex((r) => r.key === 'Retest')).toBeLessThan(
+      rows.findIndex((r) => r.key === 'FOMO / impulsif'),
+    )
+  })
+
+  it('learns a recurring free-text term not in the lexicon', () => {
+    const j = [
+      R('pola cangkir terbentuk rapi', { entry_at: '2026-08-01T08:00:00Z', exit: 110 }),
+      R('cangkir dengan handle', { entry_at: '2026-08-02T08:00:00Z', exit: 110 }),
+      R('cangkir lagi di H4', { entry_at: '2026-08-03T08:00:00Z', exit: 90 }),
+    ]
+    expect(byReason(j).some((r) => r.key === '“cangkir”')).toBe(true)
   })
 })
 

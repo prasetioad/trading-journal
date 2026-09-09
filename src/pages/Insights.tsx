@@ -3,6 +3,7 @@ import { useStore } from '../store/store'
 import {
   byHour,
   byMarketCondition,
+  byReason,
   bySession,
   bySetupTag,
   byWeekday,
@@ -28,6 +29,7 @@ export default function Insights() {
       weekday: byWeekday(journal),
       setup: bySetupTag(journal),
       market: byMarketCondition(journal),
+      reason: byReason(journal),
       dna: tradingDNA(journal),
     }),
     [journal, strategies],
@@ -79,6 +81,18 @@ export default function Insights() {
       <Card>
         <SectionTitle title="Performa per setup" hint="Satu trade bisa masuk beberapa tag." />
         <BucketTable rows={d.setup} label="Setup" emptyHint="Tambahkan setup tag pada trade." />
+      </Card>
+
+      <Card>
+        <SectionTitle
+          title="Performa per alasan"
+          hint="Win rate & expectancy per kata kunci di kolom 'Alasan & Catatan' — kosakata TA + istilahmu sendiri yang berulang. Satu trade bisa masuk beberapa baris."
+        />
+        <BucketTable
+          rows={d.reason}
+          label="Alasan / kata kunci"
+          emptyHint="Butuh ≥ 2 trade closed dengan catatan yang mengandung kata kunci sama."
+        />
       </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

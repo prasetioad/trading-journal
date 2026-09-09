@@ -101,6 +101,98 @@ export function byMarketCondition(entries: JournalEntry[]): Bucket[] {
   )
 }
 
+// ---------- performance by reason (free-text `reasoning`) ----------
+
+/** Canonical TA vocabulary (bilingual) matched against the reasoning text. */
+const REASON_LEXICON: { label: string; re: RegExp }[] = [
+  { label: 'Retest', re: /\bre-?test/i },
+  { label: 'Breakout', re: /break\s?out|\bbreak\b|tembus/i },
+  { label: 'Volume', re: /\bvolume\b|\bvol\b/i },
+  { label: 'Demand zone', re: /\bdemand\b/i },
+  { label: 'Supply zone', re: /\bsupply\b/i },
+  { label: 'BOS / struktur', re: /\bbos\b|break of structure|market structure|struktur/i },
+  { label: 'Rejection / wick', re: /rejection|\breject\b|\bwick\b/i },
+  { label: 'Divergence', re: /divergen(?:ce|si)?/i },
+  { label: 'Support/Resistance', re: /support|resist|\bs\/?r\b|\bsnr\b|\bsnd\b/i },
+  { label: 'Trendline', re: /trend\s?line|garis tren|downtrend line|uptrend line/i },
+  { label: 'EMA / MA', re: /\bema\s?\d*\b|\bma\s?\d+\b|moving average/i },
+  { label: 'Fibonacci', re: /fib(?:onacci)?/i },
+  { label: 'Swing high/low', re: /swing\s?(?:high|low|point)?/i },
+  { label: 'News / listing', re: /\bnews\b|berita|listing|rilis data/i },
+  { label: 'Konfirmasi', re: /konfirmasi|\bconfirm/i },
+  { label: 'HH-HL / struktur naik', re: /higher low|higher high|hh[-\s]?hl|lower high|lower low/i },
+  { label: 'Liquidity / sweep', re: /liquidity|likuiditas|liq\.? grab|sweep|grab/i },
+  { label: 'Range / konsolidasi', re: /\brange\b|konsolidasi|sideways/i },
+  { label: 'Pullback / koreksi', re: /pull\s?back|koreksi/i },
+  { label: 'Zona belum mitigasi', re: /mitigasi|un-?mitigat|belum.*mitigasi|fresh zone/i },
+  { label: 'ATH', re: /\bath\b|all[-\s]?time high/i },
+  { label: 'RSI', re: /\brsi\b/i },
+  { label: 'Overbought/oversold', re: /overbought|oversold|jenuh (?:beli|jual)/i },
+  { label: 'FOMO / impulsif', re: /\bfomo\b|takut ketinggalan|impuls/i },
+  { label: 'Revenge', re: /revenge|balas dendam/i },
+  { label: 'Order block', re: /order block|\bob\b/i },
+  { label: 'Fair value gap', re: /\bfvg\b|fair value gap|imbalance/i },
+  { label: 'Inverse H&S / pola', re: /inverse h&s|head\s?and\s?shoulders|h&s|double (?:top|bottom)/i },
+  { label: 'Eksperimen / hype', re: /eksperimen|hype|meme|ikut(?:-ikutan)?/i },
+]
+
+const REASON_STOPWORDS = new Set([
+  'di', 'ke', 'dari', 'yang', 'dan', 'atau', 'untuk', 'pada', 'dengan', 'saat', 'sudah',
+  'belum', 'tapi', 'tanpa', 'ini', 'itu', 'ada', 'jadi', 'akan', 'masih', 'lalu', 'karena',
+  'agar', 'bukan', 'saya', 'kita', 'juga', 'buat', 'kalau', 'bisa', 'lebih', 'tetap',
+  'lagi', 'atas', 'bawah', 'setelah', 'sebelum', 'langsung', 'jelas', 'orang', 'lihat',
+  'waktu', 'dekat', 'kena', 'sampai', 'sekitar', 'valid', 'bersih', 'rapi', 'kuat',
+  'cepat', 'besar', 'kecil', 'lama', 'baru', 'sini', 'situ', 'nya', 'padahal', 'tengah',
+  'high', 'low', 'candle', 'close',
+  'the', 'and', 'for', 'with', 'after', 'before', 'from', 'into', 'over', 'entry', 'exit',
+  'trade', 'target', 'harga', 'price', 'level', 'setup', 'masuk', 'keluar', 'posisi',
+])
+
+const tokenize = (text: string): string[] =>
+  text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 4 && !REASON_STOPWORDS.has(w) && !/^\d+$/.test(w))
+
+/** Reason keywords a single trade matches: lexicon hits + notable free tokens. */
+export function reasonKeywords(text: string, extraTerms: Set<string> = new Set()): string[] {
+  const hits = new Set<string>()
+  for (const { label, re } of REASON_LEXICON) if (re.test(text)) hits.add(label)
+  const covered = [...hits].join(' • ').toLowerCase() // suppress free tokens already named by a label
+  for (const tok of tokenize(text)) {
+    if (!extraTerms.has(tok) || covered.includes(tok)) continue
+    hits.add(`“${tok}”`)
+  }
+  return [...hits]
+}
+
+/**
+ * Win rate / expectancy grouped by what you wrote in `reasoning`.
+ * Combines a curated TA lexicon with any word that recurs across >= `minTrades`
+ * closed trades, so it also learns your own vocabulary.
+ */
+export function byReason(entries: JournalEntry[], minTrades = 2): Bucket[] {
+  const closed = closedOf(entries)
+
+  // learn recurring free-text terms
+  const freq = new Map<string, number>()
+  for (const e of closed) {
+    for (const tok of new Set(tokenize(e.reasoning))) freq.set(tok, (freq.get(tok) ?? 0) + 1)
+  }
+  const extra = new Set([...freq.entries()].filter(([, n]) => n >= Math.max(3, minTrades)).map(([w]) => w))
+
+  const by = new Map<string, JournalEntry[]>()
+  for (const e of closed) {
+    for (const k of reasonKeywords(e.reasoning, extra)) (by.get(k) ?? by.set(k, []).get(k)!).push(e)
+  }
+
+  return [...by.entries()]
+    .map(([k, list]) => bucket(k, list))
+    .filter((b) => b.trades >= minTrades)
+    .sort((a, b) => b.expectancy - a.expectancy || b.trades - a.trades)
+}
+
 // ---------- streaks ----------
 
 export interface Streaks {

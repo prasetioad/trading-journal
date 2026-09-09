@@ -9,7 +9,7 @@ import type { JournalEntry, Strategy } from '../types'
 import { DESTRUCTIVE_EMOTIONS } from '../types'
 import { plannedRR, round } from './finance'
 import { toIDR } from './fx'
-import { bySetupTag, bySession, byHour } from './analytics'
+import { bySetupTag, bySession, byHour, byReason } from './analytics'
 
 const pnlBase = (e: JournalEntry) => toIDR(e.realized_pnl, e.size_currency)
 const sizeBase = (e: JournalEntry) => toIDR(e.size_amount, e.size_currency)
@@ -256,6 +256,27 @@ export function autoInsights(entries: JournalEntry[], _strategies: Strategy[] = 
       title: `Kelemahan: ${worst.key}`,
       detail: `${worst.trades} trade (${((worst.trades / closed.length) * 100).toFixed(0)}% dari total) menghasilkan ${(share * 100).toFixed(0)}% dari total loss. Expectancy ${fmtIDR(worst.expectancy)}/trade.`,
       magnitude: Math.abs(worst.netPnl),
+    })
+  }
+
+  // reason keywords — what your notes say on winners vs losers
+  const reasons = byReason(entries, 3)
+  const bestReason = reasons[0]
+  if (bestReason && bestReason.expectancy > 0 && bestReason.winRate >= 0.55) {
+    out.push({
+      kind: 'edge',
+      title: `Edge di catatan: ${bestReason.key}`,
+      detail: `Trade yang alasannya menyebut ${bestReason.key}: win rate ${(bestReason.winRate * 100).toFixed(0)}% · expectancy ${fmtIDR(bestReason.expectancy)}/trade (${bestReason.trades} trade).`,
+      magnitude: Math.abs(bestReason.expectancy) * bestReason.trades * 0.9,
+    })
+  }
+  const worstReason = reasons[reasons.length - 1]
+  if (worstReason && worstReason !== bestReason && worstReason.expectancy < 0 && worstReason.winRate <= 0.4) {
+    out.push({
+      kind: 'weakness',
+      title: `Alasan bermasalah: ${worstReason.key}`,
+      detail: `Saat catatanmu menyebut ${worstReason.key}: win rate ${(worstReason.winRate * 100).toFixed(0)}% · expectancy ${fmtIDR(worstReason.expectancy)}/trade (${worstReason.trades} trade). Pertimbangkan skip bila alasan entry hanya ini.`,
+      magnitude: Math.abs(worstReason.netPnl) * 0.9,
     })
   }
 

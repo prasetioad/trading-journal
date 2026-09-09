@@ -15,6 +15,7 @@ export interface TradeSpec {
   tp?: number
   sl?: number
   psychology?: JournalEntry['psychology']
+  reasoning?: string
   setup_tags?: string[]
   market_condition?: JournalEntry['market_condition']
   confidence?: number | null
@@ -49,7 +50,7 @@ export function trade(spec: TradeSpec): JournalEntry {
     status: 'open',
     outcome: null,
     psychology: spec.psychology ?? 'Netral',
-    reasoning: 'test',
+    reasoning: spec.reasoning ?? 'test',
     analyzed_by_ai: false,
     analyzed_at: null,
     closed_at: null,
