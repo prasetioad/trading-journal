@@ -10,17 +10,22 @@ import { StrategyForm } from '../features/playbook/StrategyForm'
 const statusTone = { testing: 'warn', active: 'brand', archived: 'neutral' } as const
 
 export default function Playbook() {
-  const { strategies, journal, addStrategy, updateStrategy, deleteStrategy } = useStore()
+  const { strategies, allJournal, addStrategy, updateStrategy, deleteStrategy } = useStore()
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState<Strategy | null>(null)
 
   const rows = useMemo(
     () =>
-      strategies.map((s) => ({
-        s,
-        stats: strategyStats(s.id, s.name, s.status, s.target_sample_size, journal),
-      })),
-    [strategies, journal],
+      strategies.map((s) => {
+        const closed = allJournal.filter((t) => t.strategy_id === s.id && t.status === 'closed')
+        return {
+          s,
+          stats: strategyStats(s.id, s.name, s.status, s.target_sample_size, allJournal),
+          bt: closed.filter((t) => t.mode === 'backtest').length,
+          live: closed.filter((t) => t.mode !== 'backtest').length,
+        }
+      }),
+    [strategies, allJournal],
   )
 
   return (
@@ -42,7 +47,7 @@ export default function Playbook() {
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {rows.map(({ s, stats }) => (
+          {rows.map(({ s, stats, bt, live }) => (
             <Card key={s.id}>
               <div className="flex items-start justify-between gap-3">
                 <div>
@@ -72,7 +77,14 @@ export default function Playbook() {
 
               <div className="mt-4">
                 <div className="mb-1.5 flex items-center justify-between text-[11px] text-ink-soft">
-                  <span>Sample progress</span>
+                  <span>
+                    Sample progress
+                    {bt > 0 && (
+                      <span className="ml-2 text-ink-mute">
+                        ({live} live · <span className="text-violet">{bt} bt</span>)
+                      </span>
+                    )}
+                  </span>
                   {stats.sampleReady ? (
                     <Badge tone="brand">Valid Sample</Badge>
                   ) : (

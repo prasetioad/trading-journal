@@ -19,6 +19,30 @@ export interface PriceFeedEvents {
 
 const norm = (p: string) => p.trim().toUpperCase()
 
+// ---- Exchange symbols (crypto pair picker — no typos) ----
+
+/**
+ * All actively-trading spot symbols from Binance, via the CORS-enabled mirror.
+ * Used to populate the pair combobox. Cached by the caller (src/lib/pairs.ts).
+ */
+export async function fetchSpotSymbols(): Promise<string[]> {
+  const res = await fetch(`${REST_BASE}/exchangeInfo?permissions=SPOT`)
+  if (!res.ok) throw new Error(`Binance exchangeInfo ${res.status}`)
+  const data = (await res.json()) as {
+    symbols?: { symbol: string; status: string; quoteAsset: string; isSpotTradingAllowed?: boolean }[]
+  }
+  return (data.symbols ?? [])
+    .filter(
+      (s) =>
+        s.status === 'TRADING' &&
+        s.isSpotTradingAllowed !== false &&
+        // only quotes the live price feed can track (see isCryptoPair in verify.ts)
+        (s.quoteAsset === 'USDT' || s.quoteAsset === 'USDC'),
+    )
+    .map((s) => s.symbol)
+    .sort()
+}
+
 export class PriceFeed {
   private ws: WebSocket | null = null
   private pairs = new Set<string>()

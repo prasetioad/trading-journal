@@ -15,6 +15,15 @@ export function direction(entry: number, tp: number): 'long' | 'short' {
   return tp >= entry ? 'long' : 'short'
 }
 
+/**
+ * SL must sit on the losing side of entry (below for a long, above for a short).
+ * A wrong-side SL turns an "exit at SL" into a fake win — guard the form with this.
+ */
+export function slOnLossSide(entry: number, tp: number, sl: number): boolean {
+  if (sl === entry) return false
+  return direction(entry, tp) === 'long' ? sl < entry : sl > entry
+}
+
 /** Planned R:R = |TP - Entry| / |Entry - SL| */
 export function plannedRR(entry: number, tp: number, sl: number): number | null {
   const risk = Math.abs(entry - sl)
@@ -47,6 +56,23 @@ export function outcomeOf(pnl: number): 'win' | 'lose' | 'breakeven' {
   if (pnl > 0) return 'win'
   if (pnl < 0) return 'lose'
   return 'breakeven'
+}
+
+/**
+ * Merge an edit into a trade and keep derived fields consistent:
+ * `direction` from entry/TP, and — if the trade is closed with an exit —
+ * `realized_pnl` / `realized_rr` / `outcome` recomputed from the new prices.
+ */
+export function applyTradeEdit(t: JournalEntry, patch: Partial<JournalEntry>): JournalEntry {
+  const m: JournalEntry = { ...t, ...patch }
+  m.direction = direction(m.entry_price, m.take_profit)
+  if (m.status === 'closed' && m.exit_price != null) {
+    const pnl = realizedPnl(m, m.exit_price)
+    m.realized_pnl = pnl
+    m.realized_rr = realizedRR(m, m.exit_price)
+    m.outcome = outcomeOf(pnl)
+  }
+  return m
 }
 
 // ---------- Strategy aggregate metrics (Strategy League Table) ----------

@@ -5,6 +5,8 @@
 import type { JournalEntry, Strategy } from '../types'
 import { DESTRUCTIVE_EMOTIONS } from '../types'
 import { disciplineSummary, leakSummary, strategyStats } from './finance'
+import { autoInsights, behaviorFlags } from './rules'
+import { bySession } from './analytics'
 import { toIDR } from './fx'
 import { money } from './format'
 
@@ -111,4 +113,70 @@ export function buildBriefing(
       { label: 'Trade dianalisa', value: String(pool.length) },
     ],
   }
+}
+
+// ---------------------------------------------------------------------------
+// Weekly Review (Roadmap V2 A4) — deterministic prose over the last N days.
+// The AI path (engine.ts) may replace `summary`; everything else stays derived.
+// ---------------------------------------------------------------------------
+
+export interface WeeklyReview {
+  rangeLabel: string
+  trades: number
+  summary: string
+  wins: string[] // what went well
+  watch: string[] // what to watch
+  actions: string[] // concrete next steps
+}
+
+export function buildWeeklyReview(
+  entries: JournalEntry[],
+  strategies: Strategy[],
+  now = new Date(),
+  days = 7,
+): WeeklyReview {
+  const since = new Date(now.getTime() - days * 86400000)
+  const inRange = entries.filter((e) => new Date(e.entry_at) >= since)
+  const closed = inRange.filter((e) => e.status === 'closed')
+  const net = closed.reduce((s, e) => s + toIDR(e.realized_pnl, e.size_currency), 0)
+  const wins = closed.filter((e) => (e.realized_pnl ?? 0) > 0).length
+  const rangeLabel = `${since.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })} – ${now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}`
+
+  const disc = disciplineSummary(inRange)
+  const leak = leakSummary(inRange)
+  const flags = behaviorFlags(inRange)
+  const revenge = flags.filter((f) => f.kind === 'revenge').length
+  const insights = autoInsights(entries, strategies)
+  const sess = bySession(entries).filter((b) => b.trades >= 2)
+  const bestSess = [...sess].sort((a, b) => b.expectancy - a.expectancy)[0]
+
+  const summary = closed.length
+    ? `Minggu ini ${closed.length} trade ditutup (${wins} Win, ${closed.length - wins} Lose), net ${money(net, 'IDR', { sign: true })}. Discipline score ${disc.score}%.`
+    : `Belum ada trade yang ditutup dalam ${days} hari terakhir.`
+
+  const good: string[] = []
+  if (disc.score >= 75) good.push(`Kepatuhan SOP kuat (${disc.cleanTrades}/${disc.totalClosed} trade bersih).`)
+  const edge = insights.find((i) => i.kind === 'edge')
+  if (edge) good.push(edge.detail)
+  if (bestSess) good.push(`Performa terbaik di sesi ${bestSess.key} (expectancy ${money(bestSess.expectancy, 'IDR', { sign: true })}/trade).`)
+  if (!good.length) good.push('Belum ada pola positif yang menonjol — kumpulkan lebih banyak sampel.')
+
+  const watch: string[] = []
+  if (revenge) watch.push(`${revenge} entri terdeteksi revenge trading (masuk cepat setelah loss, size/risk naik).`)
+  if (leak.leakTotal < 0) watch.push(`Kebocoran emosi ${money(leak.leakTotal, 'IDR', { sign: true })} dari trade ${leak.offenders[0]?.emotion ?? 'emosional'}.`)
+  const weak = insights.find((i) => i.kind === 'weakness')
+  if (weak) watch.push(weak.detail)
+  const timeIns = insights.find((i) => i.kind === 'time')
+  if (timeIns) watch.push(timeIns.detail)
+  if (!watch.length) watch.push('Tidak ada kebocoran perilaku yang mencolok minggu ini.')
+
+  const actions: string[] = []
+  if (revenge || leak.leakTotal < 0)
+    actions.push('Setelah 2 loss beruntun: stop 30 menit, kembali hanya untuk setup A+.')
+  const riskIns = insights.find((i) => i.kind === 'risk')
+  if (riskIns) actions.push('Kunci risk maksimal 2% per trade — jangan naikkan saat streak.')
+  if (weak) actions.push(`Kurangi eksekusi ${weak.title.replace('Kelemahan: ', '')} sampai ada sampel valid pada strategi utama.`)
+  if (!actions.length) actions.push('Pertahankan ritme. Fokus menyelesaikan kuota sampel strategi utama.')
+
+  return { rangeLabel, trades: closed.length, summary, wins: good, watch, actions }
 }

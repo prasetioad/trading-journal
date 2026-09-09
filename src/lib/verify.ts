@@ -21,6 +21,24 @@ export function checkTrade(t: JournalEntry, price: number): TradeHit | null {
   return null
 }
 
+/**
+ * Range variant for delayed data (e.g. IDX quotes polled every minute): a bar's
+ * [low, high] can straddle SL/TP even if the last price recovered. SL is checked
+ * first — with delayed data we assume the worse touch happened.
+ */
+export function checkTradeRange(t: JournalEntry, low: number, high: number): TradeHit | null {
+  if (t.status !== 'open') return null
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null
+  if (t.direction === 'long') {
+    if (low <= t.stop_loss) return { exitPrice: t.stop_loss, reason: 'sl' }
+    if (high >= t.take_profit) return { exitPrice: t.take_profit, reason: 'tp' }
+  } else {
+    if (high >= t.stop_loss) return { exitPrice: t.stop_loss, reason: 'sl' }
+    if (low <= t.take_profit) return { exitPrice: t.take_profit, reason: 'tp' }
+  }
+  return null
+}
+
 export interface AnalysisHit {
   status: 'success' | 'fail'
 }
@@ -35,6 +53,21 @@ export function checkAnalysis(a: Analysis, price: number): AnalysisHit | null {
   } else {
     if (price <= a.target_price) return { status: 'success' }
     if (price >= a.invalidation_price) return { status: 'fail' }
+  }
+  return null
+}
+
+/** Range variant of checkAnalysis for delayed data. */
+export function checkAnalysisRange(a: Analysis, low: number, high: number): AnalysisHit | null {
+  if (a.status !== 'pending') return null
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return null
+  const targetUp = a.target_price >= a.invalidation_price
+  if (targetUp) {
+    if (low <= a.invalidation_price) return { status: 'fail' }
+    if (high >= a.target_price) return { status: 'success' }
+  } else {
+    if (high >= a.invalidation_price) return { status: 'fail' }
+    if (low <= a.target_price) return { status: 'success' }
   }
   return null
 }

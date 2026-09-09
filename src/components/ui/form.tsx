@@ -79,6 +79,74 @@ export function Toggle({
   )
 }
 
+/** Multi-select chip picker. `suggestions` are quick toggles; free text can be added. */
+export function TagPicker({
+  value,
+  onChange,
+  suggestions,
+  placeholder = 'Tambah tag…',
+  allowCustom = true,
+}: {
+  value: string[]
+  onChange: (v: string[]) => void
+  suggestions: readonly string[]
+  placeholder?: string
+  allowCustom?: boolean
+}) {
+  const toggle = (t: string) =>
+    onChange(value.includes(t) ? value.filter((x) => x !== t) : [...value, t])
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-1.5">
+        {suggestions.map((s) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => toggle(s)}
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
+              value.includes(s)
+                ? 'border-brand/40 bg-brand/15 text-brand'
+                : 'border-border bg-surface-2 text-ink-soft hover:text-ink'
+            }`}
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+      {value.some((v) => !suggestions.includes(v)) && (
+        <div className="flex flex-wrap gap-1.5">
+          {value
+            .filter((v) => !suggestions.includes(v))
+            .map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => toggle(v)}
+                className="rounded-full border border-violet/40 bg-violet/15 px-2.5 py-1 text-[11px] font-semibold text-violet"
+              >
+                {v} ✕
+              </button>
+            ))}
+        </div>
+      )}
+      {allowCustom && (
+        <input
+          className="field"
+          placeholder={placeholder}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
+            const t = (e.target as HTMLInputElement).value.trim()
+            if (t && !value.includes(t)) onChange([...value, t])
+            ;(e.target as HTMLInputElement).value = ''
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
 export function SegmentedField<T extends string>({
   value,
   onChange,

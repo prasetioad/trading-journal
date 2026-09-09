@@ -3,15 +3,22 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useStore } from './store/store'
 import { useToastBusBridge } from './components/ui/Toast'
 import { LiveStatus } from './components/LiveStatus'
+import { StorageStatus } from './components/StorageStatus'
 import Dashboard from './pages/Dashboard'
 import Playbook from './pages/Playbook'
 import Journal from './pages/Journal'
 import Analysis from './pages/Analysis'
+import Insights from './pages/Insights'
+import Plan from './pages/Plan'
+import BacktestLab from './pages/BacktestLab'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: '▚' },
+  { to: '/insights', label: 'Insights', icon: '✦' },
   { to: '/playbook', label: 'Strategy Playbook', icon: '❐' },
   { to: '/journal', label: 'Trading Journal', icon: '≣' },
+  { to: '/backtest', label: 'Backtest Lab', icon: '⌗' },
+  { to: '/plan', label: 'Trading Plan', icon: '◔' },
   { to: '/analysis', label: 'My Analysis', icon: '◈' },
 ]
 
@@ -49,8 +56,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="mt-auto space-y-2 border-t border-border pt-3">
         <p className="px-2 text-[10px] leading-relaxed text-ink-mute">
-          Data lokal (localStorage). Harga crypto live via Binance. Backend Supabase disiapkan di{' '}
-          <code className="text-ink-soft">/supabase</code>.
+          Storage: Google Sheets (jika <code className="text-ink-soft">VITE_SHEETS_WEBAPP_URL</code>{' '}
+          diset) dengan cache localStorage — lihat{' '}
+          <code className="text-ink-soft">docs/google-sheets-storage.md</code>. Harga crypto live via
+          Binance.
         </p>
         <button className="btn btn-ghost w-full text-xs" onClick={resetDemo}>
           Reset data demo
@@ -58,7 +67,12 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <button
           className="btn btn-ghost w-full text-xs"
           onClick={() => {
-            if (confirm('Hapus semua data lokal?')) clearAll()
+            if (
+              confirm(
+                'Hapus semua data (termasuk Backtest Lab)? Ini juga mengosongkan Google Sheet jika tersambung.',
+              )
+            )
+              clearAll()
           }}
         >
           Kosongkan data
@@ -102,15 +116,21 @@ export default function App() {
             ☰
           </button>
           <div className="hidden text-xs text-ink-mute lg:block">Trading Journal &amp; Analysis</div>
-          <LiveStatus />
+          <div className="flex items-center gap-3">
+            <StorageStatus />
+            <LiveStatus />
+          </div>
         </header>
 
         <div className="mx-auto max-w-[1180px] px-4 py-6 sm:px-6">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/insights" element={<Insights />} />
             <Route path="/playbook" element={<Playbook />} />
             <Route path="/journal" element={<Journal />} />
+            <Route path="/backtest" element={<BacktestLab />} />
+            <Route path="/plan" element={<Plan />} />
             <Route path="/analysis" element={<Analysis />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>

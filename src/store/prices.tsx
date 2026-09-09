@@ -8,9 +8,19 @@ import {
   type ReactNode,
 } from 'react'
 import { PriceFeed, type ConnState } from '../lib/binance'
-import { checkAnalysis, checkTrade, isCryptoPair } from '../lib/verify'
+import {
+  checkAnalysis,
+  checkAnalysisRange,
+  checkTrade,
+  checkTradeRange,
+  isCryptoPair,
+} from '../lib/verify'
+import { fetchStockQuotes, type StockQuote } from '../lib/stocks'
+import { dateTime } from '../lib/format'
 import { emitToast } from '../components/ui/Toast'
 import { useStore } from './store'
+
+export type StockSyncState = 'off' | 'polling' | 'ok' | 'error'
 
 interface PricesValue {
   prices: Record<string, number>
@@ -19,16 +29,20 @@ interface PricesValue {
   lastUpdate: number | null
   autoVerify: boolean
   setAutoVerify: (v: boolean) => void
+  stock: { state: StockSyncState; watching: string[]; lastUpdate: number | null }
 }
 
 const Ctx = createContext<PricesValue | null>(null)
 const AV_KEY = 'tj.autoVerify'
+const STOCK_POLL_MS = 60_000
 
 export function PricesProvider({ children }: { children: ReactNode }) {
   const { journal, analyses, closeTrade, resolveAnalysis } = useStore()
   const [prices, setPrices] = useState<Record<string, number>>({})
   const [state, setState] = useState<ConnState>('idle')
   const [lastUpdate, setLastUpdate] = useState<number | null>(null)
+  const [stockState, setStockState] = useState<StockSyncState>('off')
+  const [stockLastUpdate, setStockLastUpdate] = useState<number | null>(null)
   const [autoVerify, setAutoVerifyState] = useState<boolean>(() => {
     try {
       return localStorage.getItem(AV_KEY) !== '0'
@@ -57,6 +71,15 @@ export function PricesProvider({ children }: { children: ReactNode }) {
     return [...s].sort()
   }, [journal, analyses])
 
+  const stockWatching = useMemo(() => {
+    const s = new Set<string>()
+    for (const t of journal) if (t.status === 'open' && t.asset_type === 'stock' && t.pair) s.add(t.pair.toUpperCase())
+    for (const a of analyses)
+      if (a.status === 'pending' && a.asset_type === 'stock' && a.pair) s.add(a.pair.toUpperCase())
+    return [...s].sort()
+  }, [journal, analyses])
+  const stockKey = stockWatching.join(',')
+
   const feedRef = useRef<PriceFeed | null>(null)
   if (!feedRef.current) {
     feedRef.current = new PriceFeed({
@@ -76,6 +99,43 @@ export function PricesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => feedRef.current?.stop(), [])
 
+  // --- Delayed IDX/stock polling (Yahoo via Apps Script proxy or CORS proxy) ---
+  useEffect(() => {
+    const symbols = stockKey ? stockKey.split(',') : []
+    if (symbols.length === 0) {
+      setStockState('off')
+      return
+    }
+    let alive = true
+    const poll = async () => {
+      setStockState((s) => (s === 'ok' ? s : 'polling'))
+      try {
+        const quotes = await fetchStockQuotes(symbols)
+        if (!alive) return
+        if (quotes.length === 0) {
+          setStockState('error')
+          return
+        }
+        setPrices((cur) => {
+          const next = { ...cur }
+          for (const q of quotes) next[q.symbol] = q.price
+          return next
+        })
+        setStockState('ok')
+        setStockLastUpdate(Date.now())
+        runStockVerify(quotes, ref.current)
+      } catch {
+        if (alive) setStockState('error')
+      }
+    }
+    void poll()
+    const id = setInterval(() => void poll(), STOCK_POLL_MS)
+    return () => {
+      alive = false
+      clearInterval(id)
+    }
+  }, [stockKey])
+
   const value: PricesValue = {
     prices,
     state,
@@ -83,6 +143,7 @@ export function PricesProvider({ children }: { children: ReactNode }) {
     lastUpdate,
     autoVerify,
     setAutoVerify,
+    stock: { state: stockState, watching: stockWatching, lastUpdate: stockLastUpdate },
   }
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
@@ -131,6 +192,53 @@ function runVerify(
         hit.status === 'success'
           ? `Harga menyentuh target ${a.target_price}`
           : `Harga menyentuh invalidation ${a.invalidation_price}`,
+    })
+  }
+}
+
+// --- delayed stock verification (range-based; a bar can straddle SL/TP) ---
+function runStockVerify(
+  quotes: StockQuote[],
+  s: {
+    journal: ReturnType<typeof useStore>['journal']
+    analyses: ReturnType<typeof useStore>['analyses']
+    autoVerify: boolean
+    closeTrade: ReturnType<typeof useStore>['closeTrade']
+    resolveAnalysis: ReturnType<typeof useStore>['resolveAnalysis']
+  },
+) {
+  if (!s.autoVerify) return
+  const bySym = new Map(quotes.map((q) => [q.symbol, q]))
+
+  for (const t of s.journal) {
+    if (t.status !== 'open' || t.asset_type !== 'stock') continue
+    const q = bySym.get(t.pair.toUpperCase())
+    if (!q || acted.has(t.id)) continue
+    const hit = checkTradeRange(t, q.dayLow, q.dayHigh)
+    if (!hit) continue
+    acted.add(t.id)
+    s.closeTrade(t.id, hit.exitPrice)
+    setTimeout(() => acted.delete(t.id), 10_000)
+    emitToast({
+      tone: hit.reason === 'tp' ? 'win' : 'lose',
+      title: `${t.pair} menyentuh ${hit.reason === 'tp' ? 'Take Profit' : 'Stop Loss'}`,
+      body: `Ditutup otomatis @ ${hit.exitPrice}${q.time ? ` · data per ${dateTime(new Date(q.time).toISOString())}` : ''}`,
+    })
+  }
+
+  for (const a of s.analyses) {
+    if (a.status !== 'pending' || a.asset_type !== 'stock') continue
+    const q = bySym.get(a.pair.toUpperCase())
+    if (!q || acted.has(a.id)) continue
+    const hit = checkAnalysisRange(a, q.dayLow, q.dayHigh)
+    if (!hit) continue
+    acted.add(a.id)
+    s.resolveAnalysis(a.id, hit.status)
+    setTimeout(() => acted.delete(a.id), 10_000)
+    emitToast({
+      tone: hit.status === 'success' ? 'win' : 'lose',
+      title: `Prediksi ${a.pair} ${hit.status === 'success' ? 'TERCAPAI' : 'invalid'}`,
+      body: `Range hari ${q.dayLow}–${q.dayHigh}${q.time ? ` · data per ${dateTime(new Date(q.time).toISOString())}` : ''}`,
     })
   }
 }

@@ -17,8 +17,15 @@ const label: Record<string, string> = {
   idle: 'idle',
 }
 
+const stockDot: Record<string, string> = {
+  off: 'bg-ink-mute',
+  polling: 'bg-warn animate-pulse',
+  ok: 'bg-info',
+  error: 'bg-lose',
+}
+
 export function LiveStatus() {
-  const { state, watching, autoVerify, setAutoVerify } = usePrices()
+  const { state, watching, autoVerify, setAutoVerify, stock } = usePrices()
   return (
     <div className="flex items-center gap-3">
       <div className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5">
@@ -34,6 +41,18 @@ export function LiveStatus() {
           )}
         </span>
       </div>
+      {stock.watching.length > 0 && (
+        <div
+          className="flex items-center gap-2 rounded-lg border border-border bg-surface-2 px-2.5 py-1.5"
+          title="Harga saham IDX via Yahoo — delay ~15 menit, cek tiap 60 dtk"
+        >
+          <span className={`h-2 w-2 rounded-full ${stockDot[stock.state]}`} />
+          <span className="text-[11px] font-semibold text-ink-soft">
+            IDX{stock.state === 'error' ? ' error' : ' (delay)'}
+            <span className="text-ink-mute"> · {stock.watching.length} saham</span>
+          </span>
+        </div>
+      )}
       <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-ink-soft">
         <input
           type="checkbox"

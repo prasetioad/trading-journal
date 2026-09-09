@@ -2,6 +2,15 @@
 
 Status per 2026-09-09. Legenda: ✅ selesai · 🟡 sebagian · ⛔ terblokir (butuh input eksternal) · ⬜ belum.
 
+> **Roadmap V2** (reposisi ke "Trading Performance Analytics — Find your trading edge")
+> ada di [roadmapv2.md](roadmapv2.md). **Track A (fitur credential-free) selesai:**
+> data model extension + `trading_plans`, `lib/analytics.ts` (jam/sesi/hari/setup/
+> market/streak/drawdown/DNA), `lib/rules.ts` (behavioral flags + autoInsights),
+> Vitest (36 test), halaman **Insights** & **Trading Plan**, Trading Calendar,
+> Streak/Drawdown, NL search, trade replay (Binance klines), screenshot upload,
+> CSV import. **Track B** (flip Supabase + Auth, screenshot→Storage, deploy
+> `ai-daily`, provider IDX) menunggu kredensial — sama dengan blocker di bawah.
+
 ---
 
 ## Ringkasan eksekusi sesi ini

@@ -14,6 +14,8 @@ import { RRGapChart } from '../features/dashboard/RRGapChart'
 import { EquityCurve } from '../features/dashboard/EquityCurve'
 import { PsychologyTable } from '../features/dashboard/PsychologyTable'
 import { LivePositions } from '../features/dashboard/LivePositions'
+import { TradingCalendar } from '../features/dashboard/TradingCalendar'
+import { StreakDrawdown } from '../features/dashboard/StreakDrawdown'
 
 export default function Dashboard() {
   const { journal, strategies } = useStore()
@@ -89,11 +91,16 @@ export default function Dashboard() {
       <EquityCurve />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <PsychologyTable />
+        <StreakDrawdown />
         <LivePositions />
       </div>
 
-      <RRGapChart />
+      <TradingCalendar />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <PsychologyTable />
+        <RRGapChart />
+      </div>
     </div>
   )
 }
