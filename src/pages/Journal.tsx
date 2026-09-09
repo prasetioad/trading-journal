@@ -12,6 +12,8 @@ import { Badge, Card, EmptyState, SectionTitle } from '../components/ui/primitiv
 import { Modal } from '../components/ui/Modal'
 import { JournalForm } from '../features/journal/JournalForm'
 import { CloseTradeDialog } from '../features/journal/CloseTradeDialog'
+import { ReplayDialog } from '../features/journal/ReplayDialog'
+import { isCryptoPair } from '../lib/verify'
 
 type Filter = 'all' | 'open' | 'closed'
 
@@ -20,6 +22,7 @@ export default function Journal() {
   const { prices } = usePrices()
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<JournalEntry | null>(null)
+  const [replaying, setReplaying] = useState<JournalEntry | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [query, setQuery] = useState('')
 
@@ -194,6 +197,14 @@ export default function Journal() {
                       </Td>
                       <Td right>
                         <div className="flex justify-end gap-1">
+                          {isCryptoPair(t.pair) && (
+                            <button
+                              className="btn btn-ghost px-2 py-1 text-[11px]"
+                              onClick={() => setReplaying(t)}
+                            >
+                              Replay
+                            </button>
+                          )}
                           {t.status === 'open' ? (
                             <button className="btn btn-ghost px-2 py-1 text-[11px]" onClick={() => setClosing(t)}>
                               Tutup
@@ -247,6 +258,10 @@ export default function Journal() {
             }}
           />
         )}
+      </Modal>
+
+      <Modal open={!!replaying} onClose={() => setReplaying(null)} title="Trade replay" wide>
+        {replaying && <ReplayDialog trade={replaying} />}
       </Modal>
     </div>
   )

@@ -19,6 +19,40 @@ export interface PriceFeedEvents {
 
 const norm = (p: string) => p.trim().toUpperCase()
 
+// ---- Historical candles (Roadmap V2 A8 — trade replay) ----
+
+export interface Candle {
+  t: number // open time (ms)
+  o: number
+  h: number
+  l: number
+  c: number
+}
+
+export type KlineInterval = '15m' | '1h' | '4h' | '1d'
+
+/**
+ * Fetch OHLC candles for a symbol between two instants (inclusive-ish).
+ * Uses the CORS-enabled data mirror. Binance caps `limit` at 1000.
+ */
+export async function fetchKlines(
+  symbol: string,
+  interval: KlineInterval,
+  startMs: number,
+  endMs: number,
+): Promise<Candle[]> {
+  const url =
+    `${REST_BASE}/klines?symbol=${encodeURIComponent(norm(symbol))}` +
+    `&interval=${interval}&startTime=${Math.floor(startMs)}&endTime=${Math.floor(endMs)}&limit=1000`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`Binance klines ${res.status}`)
+  const rows = (await res.json()) as unknown[]
+  return rows.map((r) => {
+    const a = r as (string | number)[]
+    return { t: Number(a[0]), o: Number(a[1]), h: Number(a[2]), l: Number(a[3]), c: Number(a[4]) }
+  })
+}
+
 export class PriceFeed {
   private ws: WebSocket | null = null
   private pairs = new Set<string>()
