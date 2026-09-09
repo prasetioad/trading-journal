@@ -3,10 +3,11 @@ import { useStore } from '../store/store'
 import type { JournalEntry } from '../types'
 import { DESTRUCTIVE_EMOTIONS } from '../types'
 import { plannedRR } from '../lib/finance'
-import { dateShort, money, num, rr } from '../lib/format'
+import { dateShort, money, num, pct, rr } from '../lib/format'
 import { unrealized } from '../lib/verify'
 import { usePrices } from '../store/prices'
 import { exportJournalCsv } from '../lib/csv'
+import { runSearch } from '../lib/search'
 import { Badge, Card, EmptyState, SectionTitle } from '../components/ui/primitives'
 import { Modal } from '../components/ui/Modal'
 import { JournalForm } from '../features/journal/JournalForm'
@@ -20,19 +21,26 @@ export default function Journal() {
   const [creating, setCreating] = useState(false)
   const [closing, setClosing] = useState<JournalEntry | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
+  const [query, setQuery] = useState('')
 
   const stratName = useMemo(() => {
     const m = new Map(strategies.map((s) => [s.id, s.name]))
     return (id: string | null) => (id ? (m.get(id) ?? 'Strategi dihapus') : 'Tanpa Strategi')
   }, [strategies])
 
+  const search = useMemo(
+    () => (query.trim() ? runSearch(journal, strategies, query) : null),
+    [journal, strategies, query],
+  )
+
   const rows = useMemo(() => {
-    const sorted = [...journal].sort(
+    const base = search ? search.trades : journal
+    const sorted = [...base].sort(
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
     if (filter === 'all') return sorted
     return sorted.filter((t) => t.status === filter)
-  }, [journal, filter])
+  }, [journal, filter, search])
 
   const openCount = journal.filter((t) => t.status === 'open').length
 
@@ -56,6 +64,34 @@ export default function Journal() {
           </div>
         }
       />
+
+      <div className="mb-3">
+        <input
+          className="field"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder='Cari natural language — mis. "BTC breakout london risk < 1.5% 6 bulan terakhir"'
+        />
+        {search && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border-soft bg-surface-2/50 px-3 py-2 text-xs">
+            <span className="text-ink-soft">
+              {search.parsed.criteria.length
+                ? search.parsed.criteria.join(' · ')
+                : 'query tidak dikenali — menampilkan semua'}
+            </span>
+            <span className="ml-auto flex gap-3 text-ink-mute">
+              <span className="tnum">{search.stats.count} trade</span>
+              <span className="tnum">WR {pct(search.stats.winRate)}</span>
+              <span className={`tnum ${search.stats.expectancy >= 0 ? 'text-win' : 'text-lose'}`}>
+                Exp {money(search.stats.expectancy, 'IDR', { sign: true })}
+              </span>
+              <span className={`tnum ${search.stats.netPnl >= 0 ? 'text-win' : 'text-lose'}`}>
+                Net {money(search.stats.netPnl, 'IDR', { sign: true })}
+              </span>
+            </span>
+          </div>
+        )}
+      </div>
 
       <div className="mb-3 flex gap-1">
         {(['all', 'open', 'closed'] as Filter[]).map((f) => (
