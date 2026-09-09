@@ -1,8 +1,19 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
 import type { Analysis, JournalEntry, Strategy, TradingPlan } from '../types'
 import { repository, type DB } from './repository'
 import { uid } from '../lib/format'
 import { applyTradeEdit, direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
+import { isEmpty, readAll, sheetsEnabled, writeAll } from '../lib/sheets'
+
+export type SyncStatus = 'off' | 'loading' | 'synced' | 'saving' | 'error'
 
 type StrategyInput = Pick<Strategy, 'name' | 'description' | 'target_sample_size' | 'status'>
 type JournalInput = Omit<
@@ -53,6 +64,8 @@ interface StoreValue {
   // admin
   resetDemo: () => void
   clearAll: () => void
+  // sync (Google Sheets backend, when VITE_SHEETS_WEBAPP_URL is set)
+  sync: { status: SyncStatus; error: string | null; lastSync: number | null; pushNow: () => void }
 }
 
 const Ctx = createContext<StoreValue | null>(null)
@@ -60,10 +73,80 @@ const Ctx = createContext<StoreValue | null>(null)
 export function StoreProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<DB>(() => repository.read())
 
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(() =>
+    sheetsEnabled() ? 'loading' : 'off',
+  )
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [lastSync, setLastSync] = useState<number | null>(null)
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dbRef = useRef(db)
+  dbRef.current = db
+
+  const pushRemote = useMemo(
+    () => async () => {
+      if (!sheetsEnabled()) return
+      setSyncStatus('saving')
+      try {
+        await writeAll(dbRef.current)
+        setSyncStatus('synced')
+        setSyncError(null)
+        setLastSync(Date.now())
+      } catch (e) {
+        setSyncStatus('error')
+        setSyncError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [],
+  )
+
   const commit = (next: DB) => {
-    repository.write(next)
+    repository.write(next) // local cache, always
     setDb(next)
+    if (sheetsEnabled()) {
+      if (pushTimer.current) clearTimeout(pushTimer.current)
+      pushTimer.current = setTimeout(() => void pushRemote(), 1500)
+    }
   }
+
+  // On boot: pull from the Sheet. If the Sheet is empty, seed it from local.
+  useEffect(() => {
+    if (!sheetsEnabled()) return
+    let alive = true
+    ;(async () => {
+      try {
+        const remote = await readAll()
+        if (!alive) return
+        if (isEmpty(remote)) {
+          await writeAll(dbRef.current) // first run — populate the Sheet from local
+        } else {
+          // screenshots live only in the browser — re-attach them by trade id
+          const shots = new Map(
+            dbRef.current.journal
+              .filter((t) => t.screenshot_ref)
+              .map((t) => [t.id, t.screenshot_ref]),
+          )
+          const merged: DB = {
+            ...remote,
+            journal: remote.journal.map((t) =>
+              shots.has(t.id) ? { ...t, screenshot_ref: shots.get(t.id)! } : t,
+            ),
+          }
+          repository.write(merged)
+          setDb(merged)
+        }
+        setSyncStatus('synced')
+        setSyncError(null)
+        setLastSync(Date.now())
+      } catch (e) {
+        if (!alive) return
+        setSyncStatus('error')
+        setSyncError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const value = useMemo<StoreValue>(() => {
     const now = () => new Date().toISOString()
@@ -226,8 +309,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       resetDemo: () => commit(repository.reset()),
       clearAll: () => commit(repository.clear()),
+
+      sync: {
+        status: syncStatus,
+        error: syncError,
+        lastSync,
+        pushNow: () => void pushRemote(),
+      },
     }
-  }, [db])
+  }, [db, syncStatus, syncError, lastSync, pushRemote])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
