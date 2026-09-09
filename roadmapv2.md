@@ -128,10 +128,19 @@ untuk pair picker (A11).
 
 ---
 
-## Track B — Aktivasi backend (⛔ butuh akun/kredensial user)
+### A12 — Storage sementara: Google Sheets  ✅
+- [x] `src/lib/sheets.ts` + `google-apps-script/Code.gs` + hybrid di `store.tsx`
+  (localStorage = cache instan, Sheet = durable; pull saat boot, push snapshot
+  debounce). Indikator `StorageStatus` di header. Screenshot tidak ikut ke Sheet.
+- [x] Setup: deploy Web App, isi `VITE_SHEETS_WEBAPP_URL` — [docs/google-sheets-storage.md](docs/google-sheets-storage.md).
+- Ini jembatan sebelum Supabase (Track B).
 
-Kode sudah siap; yang kurang hanya kredensial. Tidak dikerjakan di sesi ini,
-didokumentasikan di [MIGRATION-SUPABASE.md](MIGRATION-SUPABASE.md).
+---
+
+## Track B — Aktivasi backend Supabase (⛔ butuh akun/kredensial user)
+
+Kode sudah siap; yang kurang hanya kredensial. Storage saat ini = Google Sheets
+(A12) sebagai solusi sementara. Migrasi final di [MIGRATION-SUPABASE.md](MIGRATION-SUPABASE.md).
 
 | Item | Status | Aksi user |
 |---|---|---|

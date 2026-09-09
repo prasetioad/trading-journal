@@ -65,7 +65,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <button
           className="btn btn-ghost w-full text-xs"
           onClick={() => {
-            if (confirm('Hapus semua data lokal?')) clearAll()
+            if (confirm('Hapus semua data? Ini juga mengosongkan Google Sheet jika tersambung.'))
+              clearAll()
           }}
         >
           Kosongkan data

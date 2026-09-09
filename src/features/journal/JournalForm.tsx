@@ -46,6 +46,8 @@ export interface TradeDraft {
   risk_pct: number | null
   screenshot_ref: string | null
   mistakes: string[]
+  /** edit mode only, for a closed trade whose exit was mis-typed */
+  exit_price?: number
 }
 
 /** value for <input type=datetime-local> from an ISO string (local tz) */
@@ -95,6 +97,8 @@ export function JournalForm({
   const [shot, setShot] = useState<string | null>(initial?.screenshot_ref ?? null)
   const [shotBusy, setShotBusy] = useState(false)
   const [shotErr, setShotErr] = useState<string | null>(null)
+  const editingClosed = edit && initial?.status === 'closed'
+  const [exitPrice, setExitPrice] = useState<number | ''>(initial?.exit_price ?? '')
 
   const [cryptoPairs, setCryptoPairs] = useState<string[]>(CRYPTO_PAIRS)
   useEffect(() => {
@@ -165,6 +169,7 @@ export function JournalForm({
           risk_pct: riskPct === '' ? null : Number(riskPct),
           screenshot_ref: shot,
           mistakes,
+          ...(editingClosed && exitPrice !== '' ? { exit_price: Number(exitPrice) } : {}),
         })
       }}
       className="space-y-4"
@@ -252,6 +257,15 @@ export function JournalForm({
           <NumberInput value={sl} onChange={(e) => setSl(e.target.value === '' ? '' : Number(e.target.value))} placeholder="60000" />
         </FormRow>
       </Fieldset>
+
+      {editingClosed && (
+        <FormRow label="Harga keluar (Exit)" hint="Perbaiki bila salah input — Realized P/L & R:R dihitung ulang">
+          <NumberInput
+            value={exitPrice}
+            onChange={(e) => setExitPrice(e.target.value === '' ? '' : Number(e.target.value))}
+          />
+        </FormRow>
+      )}
 
       <Fieldset cols={3}>
         <FormRow label="Entry rencana" hint="Harga yang plan minta (opsional)">

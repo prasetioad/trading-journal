@@ -55,7 +55,8 @@ Opsional: salin `.env.example` → `.env.local` untuk mengaktifkan Supabase / Cl
 | A8 · Trade replay | ❌ dibatalkan |
 | A9 · Screenshot upload (client compress) + lightbox | ✅ |
 | A10 · CSV import | ✅ |
-| A11 · Journal editable (`updateTrade`) + searchable crypto pair picker + pattern-view list (per-trade discipline, behavior chips, sessions, sort, group-by-day) | ✅ |
+| A11 · Journal editable (`updateTrade`, incl. exit-price fix) + searchable crypto pair picker + pattern-view list (per-trade discipline, behavior chips, sessions, sort, group-by-day) | ✅ |
+| A12 · Temporary storage = Google Sheets (Apps Script Web App), localStorage as cache — [docs/google-sheets-storage.md](./docs/google-sheets-storage.md) | ✅ |
 
 **Track B (butuh kredensial user):** flip ke Supabase + Auth/RLS, screenshot →
 Storage, deploy Edge Function `ai-daily`, provider data IDX. Lihat
@@ -92,11 +93,14 @@ src/
     ai.ts                   Briefing + Weekly Review deterministik (fallback, biaya $0)
     supabase.ts             Client (aktif hanya bila env terisi)
     format.ts               Formatter uang / angka / R:R / tanggal
+  lib/
+    sheets.ts               Google Sheets storage (Apps Script Web App) — readAll/writeAll
   store/
-    repository.ts           localStorage (default aktif) + migrate() backfill V2
+    repository.ts           localStorage cache + migrate() backfill V2
     repository.supabase.ts  CRUD async row-level (siap, belum di-wire — MIGRATION-SUPABASE.md)
-    store.tsx               Context + semua action (trades, plans)
+    store.tsx               Context + semua action (trades, plans) + Sheets sync (hybrid)
     prices.tsx              PricesProvider + auto-verify + toast
+google-apps-script/Code.gs  Web App backend untuk Google Sheets (tempel & deploy)
   components/ui/            Card, Badge, ProgressBar, Gauge, StatTile, Modal, Toast, form
   features/{playbook,journal,analysis,dashboard,insights,plan}/
   pages/                    Dashboard, Insights, Playbook, Journal, Plan, Analysis
