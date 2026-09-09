@@ -16,10 +16,10 @@ const S_BREAKOUT = 'seed-strat-breakout'
 const S_SND = 'seed-strat-snd'
 const S_EMA = 'seed-strat-ema'
 
-function daysAgo(n: number, hour = 15) {
+function daysAgo(n: number, hour = 15, minute = 12) {
   const d = new Date()
   d.setDate(d.getDate() - n)
-  d.setHours(hour, 12, 0, 0)
+  d.setHours(hour, minute, 0, 0)
   return d.toISOString()
 }
 
@@ -61,6 +61,8 @@ export function seedStrategies(): Strategy[] {
 interface RawTrade {
   d: number
   h?: number // entry hour (local) — drives session spread
+  m?: number // entry minute
+  closeMin?: number // minutes after entry the position closed (overrides default)
   asset: 'crypto' | 'stock'
   pair: string
   strat: string | null
@@ -84,8 +86,10 @@ interface RawTrade {
 
 function build(r: RawTrade): JournalEntry {
   const hour = r.h ?? 9
+  const minute = r.m ?? 12
+  const entryIso = daysAgo(r.d, hour, minute)
   const base: JournalEntry = {
-    id: `seed-tr-${r.d}-${r.pair}`,
+    id: `seed-tr-${r.d}-${hour}-${minute}-${r.pair}`,
     asset_type: r.asset,
     pair: r.pair,
     strategy_id: r.strat,
@@ -106,8 +110,8 @@ function build(r: RawTrade): JournalEntry {
     analyzed_by_ai: false,
     analyzed_at: null,
     closed_at: null,
-    created_at: daysAgo(r.d, hour),
-    entry_at: daysAgo(r.d, hour),
+    created_at: entryIso,
+    entry_at: entryIso,
     planned_entry: r.planned ?? null,
     setup_tags: r.tags ?? [],
     market_condition: r.mc ?? null,
@@ -118,6 +122,10 @@ function build(r: RawTrade): JournalEntry {
   }
   if (r.open || r.exit == null) return base
   const pnl = realizedPnl(base, r.exit)
+  const closedIso =
+    r.closeMin != null
+      ? new Date(new Date(entryIso).getTime() + r.closeMin * 60000).toISOString()
+      : daysAgo(r.d, Math.min(23, hour + 4), minute)
   return {
     ...base,
     status: 'closed',
@@ -127,7 +135,7 @@ function build(r: RawTrade): JournalEntry {
     outcome: outcomeOf(pnl),
     analyzed_by_ai: r.d > 3,
     analyzed_at: r.d > 3 ? daysAgo(r.d - 1, 17) : null,
-    closed_at: daysAgo(r.d, Math.min(23, hour + 4)),
+    closed_at: closedIso,
   }
 }
 
@@ -158,6 +166,13 @@ export function seedJournal(): JournalEntry[] {
     { d: 3, h: 3, asset: 'stock', pair: 'BBCA', strat: S_SND, followed: true, size: 9000000, cur: 'IDR', entry: 10200, tp: 10600, sl: 10050, psych: 'Netral', tags: ['Supply/Demand'], mc: 'Ranging', conf: 6, risk: 1, why: 'Demand H4 di 10.2k, target supply 10.6k.', exit: 10600 },
     { d: 1, h: 6, asset: 'crypto', pair: 'BTCUSDT', strat: S_SND, followed: true, size: 800, cur: 'USD', entry: 72000, tp: 135000, sl: 55000, psych: 'Sabar', tags: ['Supply/Demand', 'Trend Following'], mc: 'Trending', conf: 7, risk: 1, why: 'Demand weekly, posisi swing jangka panjang — target siklus, SL di bawah struktur makro.', open: true },
     { d: 1, h: 19, asset: 'crypto', pair: 'ETHUSDT', strat: S_BREAKOUT, followed: true, size: 500, cur: 'USD', entry: 2600, tp: 5200, sl: 1900, psych: 'Netral', tags: ['Breakout', 'Trend Following'], mc: 'Trending', conf: 6, risk: 1, why: 'Retest range besar, hold swing. TP di ATH lama, SL di bawah demand makro.', open: true },
+
+    // --- "Tilt day" (d-4): loss → intraday revenge sequence + overtrading ---
+    { d: 4, h: 9, m: 0, closeMin: 35, asset: 'crypto', pair: 'BTCUSDT', strat: S_BREAKOUT, followed: true, size: 1000, cur: 'USD', entry: 63500, tp: 65000, sl: 62800, psych: 'Sabar', tags: ['Breakout'], mc: 'Ranging', conf: 6, risk: 1, why: 'Retest range, konfirmasi lemah, kena SL.', exit: 62800 },
+    { d: 4, h: 9, m: 45, closeMin: 20, asset: 'crypto', pair: 'ETHUSDT', strat: S_SND, followed: false, size: 2500, cur: 'USD', entry: 3500, tp: 3560, sl: 3460, psych: 'Balas dendam', tags: ['Supply/Demand'], mc: 'High volatility', conf: 3, risk: 2.8, mistakes: ['Size kegedean', 'Tanpa konfirmasi', 'Overtrading'], why: 'Langsung balas 10 menit setelah SL, size 2.5x, tanpa setup.', exit: 3460 },
+    { d: 4, h: 10, m: 10, closeMin: 15, asset: 'crypto', pair: 'BTCUSDT', strat: S_SND, followed: false, size: 3000, cur: 'USD', entry: 62900, tp: 63400, sl: 62600, psych: 'Balas dendam', tags: ['Supply/Demand'], mc: 'High volatility', conf: 2, risk: 3.0, mistakes: ['Size kegedean', 'Overtrading'], why: 'Revenge kedua, size dinaikkan lagi, scalping panik.', exit: 62600 },
+    { d: 4, h: 10, m: 40, closeMin: 30, asset: 'crypto', pair: 'SOLUSDT', strat: S_SND, followed: false, size: 1500, cur: 'USD', entry: 150, tp: 154, sl: 147, psych: 'FOMO', tags: ['Supply/Demand'], mc: 'High volatility', conf: 3, risk: 1.8, mistakes: ['Overtrading'], why: 'Masih di depan layar, paksa entry keempat.', exit: 147 },
+    { d: 4, h: 11, m: 20, closeMin: 25, asset: 'crypto', pair: 'ETHUSDT', strat: null, followed: false, size: 800, cur: 'USD', entry: 3480, tp: 3520, sl: 3450, psych: 'Serakah', tags: ['News Play'], mc: 'High volatility', conf: 3, risk: 1.5, mistakes: ['Overtrading'], why: 'Trade kelima hari itu, seharusnya sudah stop.', exit: 3520 },
 
     // --- Archived EMA strategy: historical ---
     { d: 60, h: 11, asset: 'crypto', pair: 'BTCUSDT', strat: S_EMA, followed: true, size: 1000, cur: 'USD', entry: 52000, tp: 56000, sl: 50500, psych: 'Percaya diri', tags: ['Trend Following', 'Pullback'], mc: 'Trending', conf: 8, risk: 1, why: 'Pullback EMA50 dalam uptrend, HH-HL utuh.', exit: 56000 },

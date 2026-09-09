@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useStore } from '../store/store'
 import {
   byHour,
@@ -9,7 +9,7 @@ import {
   tradingDNA,
 } from '../lib/analytics'
 import { autoInsights } from '../lib/rules'
-import { buildWeeklyReview } from '../lib/ai'
+import { generateWeeklyReview, type WeeklyReviewResult } from '../lib/ai/engine'
 import { Card, SectionTitle } from '../components/ui/primitives'
 import { AutoInsightCards } from '../features/insights/AutoInsightCards'
 import { BucketChart } from '../features/insights/BucketChart'
@@ -29,10 +29,23 @@ export default function Insights() {
       setup: bySetupTag(journal),
       market: byMarketCondition(journal),
       dna: tradingDNA(journal),
-      weekly: buildWeeklyReview(journal, strategies),
     }),
     [journal, strategies],
   )
+
+  const [weekly, setWeekly] = useState<WeeklyReviewResult | null>(null)
+  const [wLoading, setWLoading] = useState(false)
+  const runWeekly = useCallback(async () => {
+    setWLoading(true)
+    try {
+      setWeekly(await generateWeeklyReview(journal, strategies))
+    } finally {
+      setWLoading(false)
+    }
+  }, [journal, strategies])
+  useEffect(() => {
+    void runWeekly()
+  }, [runWeekly])
 
   return (
     <div className="space-y-6">
@@ -43,7 +56,14 @@ export default function Insights() {
 
       <AutoInsightCards insights={d.insights} />
 
-      <WeeklyReviewCard review={d.weekly} source="deterministik" />
+      {weekly && (
+        <WeeklyReviewCard
+          review={weekly}
+          source={weekly.source === 'claude-api' ? 'Claude API' : 'deterministik'}
+          loading={wLoading}
+          onRegenerate={runWeekly}
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>

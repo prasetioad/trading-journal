@@ -20,9 +20,13 @@ function List({ title, items, tone }: { title: string; items: string[]; tone: st
 export function WeeklyReviewCard({
   review,
   source,
+  loading,
+  onRegenerate,
 }: {
   review: WeeklyReview
   source?: string
+  loading?: boolean
+  onRegenerate?: () => void
 }) {
   return (
     <Card>
@@ -30,11 +34,22 @@ export function WeeklyReviewCard({
         title="Weekly Review"
         hint={`${review.rangeLabel} · ${review.trades} trade closed`}
         right={
-          source ? (
-            <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-ink-mute">
-              {source}
-            </span>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {source && (
+              <span className="rounded-full border border-border px-2 py-0.5 text-[10px] text-ink-mute">
+                {source}
+              </span>
+            )}
+            {onRegenerate && (
+              <button
+                className="btn btn-ghost px-2.5 py-1 text-xs"
+                disabled={loading}
+                onClick={onRegenerate}
+              >
+                {loading ? 'Menyusun…' : 'Regenerate'}
+              </button>
+            )}
+          </div>
         }
       />
       <p className="rounded-lg border border-border-soft bg-surface-2/50 px-3 py-2.5 text-[13px] text-ink">
