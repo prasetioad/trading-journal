@@ -1,6 +1,14 @@
 // Client-side CSV export + import (PRD §9 Fase 7 / Roadmap V2 A10).
 // No dependency — build/parse a string, download a Blob.
-import type { AssetType, Currency, JournalEntry, MarketCondition, Psychology, Strategy } from '../types'
+import type {
+  AssetType,
+  Currency,
+  JournalEntry,
+  MarketCondition,
+  Psychology,
+  Strategy,
+  TradeMode,
+} from '../types'
 import type { Analysis } from '../types'
 import { MARKET_CONDITIONS, PSYCHOLOGY } from '../types'
 import { plannedRR } from './finance'
@@ -27,11 +35,17 @@ function download(filename: string, csv: string) {
 
 const stamp = () => new Date().toISOString().slice(0, 10)
 
-export function exportJournalCsv(journal: JournalEntry[], strategies: Strategy[]) {
+export function exportJournalCsv(
+  journal: JournalEntry[],
+  strategies: Strategy[],
+  filename = `trading-journal_${stamp()}.csv`,
+) {
   const name = new Map(strategies.map((s) => [s.id, s.name]))
   const csv = toCsv(
     [
       'created_at',
+      'entry_at',
+      'mode',
       'pair',
       'asset_type',
       'direction',
@@ -54,6 +68,8 @@ export function exportJournalCsv(journal: JournalEntry[], strategies: Strategy[]
     ],
     journal.map((t) => [
       t.created_at,
+      t.entry_at,
+      t.mode,
       t.pair,
       t.asset_type,
       t.direction,
@@ -75,7 +91,7 @@ export function exportJournalCsv(journal: JournalEntry[], strategies: Strategy[]
       t.closed_at ?? '',
     ]),
   )
-  download(`trading-journal_${stamp()}.csv`, csv)
+  download(filename, csv)
 }
 
 // ---------------------------------------------------------------------------
@@ -105,6 +121,7 @@ export interface ImportedTrade {
   risk_pct: number | null
   screenshot_ref: null
   mistakes: string[]
+  mode: TradeMode
 }
 
 export interface ParseResult {
@@ -146,7 +163,11 @@ function parseCsv(text: string): string[][] {
   return rows
 }
 
-export function parseJournalCsv(text: string, strategies: Strategy[]): ParseResult {
+export function parseJournalCsv(
+  text: string,
+  strategies: Strategy[],
+  defaultMode: TradeMode = 'live',
+): ParseResult {
   const clean = text.replace(/^﻿/, '')
   const table = parseCsv(clean)
   const errors: string[] = []
@@ -208,6 +229,7 @@ export function parseJournalCsv(text: string, strategies: Strategy[]): ParseResu
       risk_pct: numOr(get('risk_pct'), null),
       screenshot_ref: null,
       mistakes: [],
+      mode: get('mode') === 'backtest' ? 'backtest' : defaultMode,
     })
   }
   return { rows, errors }

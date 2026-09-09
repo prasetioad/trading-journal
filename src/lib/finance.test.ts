@@ -57,6 +57,22 @@ describe('primitives', () => {
   })
 })
 
+describe('trade mode separation (Backtest Lab)', () => {
+  it('strategyStats counts live + backtest; a mode filter isolates them', () => {
+    const S = 'strat-x'
+    const mixed = [
+      trade({ strategy_id: S, entry: 100, tp: 110, sl: 90, entry_at: AT, exit: 110 }), // live win
+      { ...trade({ strategy_id: S, entry: 100, tp: 130, sl: 90, entry_at: AT, exit: 130 }), mode: 'backtest' as const }, // bt win
+      { ...trade({ strategy_id: S, entry: 100, tp: 110, sl: 90, entry_at: AT, exit: 90 }), mode: 'backtest' as const }, // bt loss
+    ]
+    const all = strategyStats(S, 'X', 'testing', 20, mixed)
+    expect(all.closedCount).toBe(3) // combined feeds the League Table
+
+    const liveOnly = strategyStats(S, 'X', 'testing', 20, mixed.filter((t) => t.mode !== 'backtest'))
+    expect(liveOnly.closedCount).toBe(1)
+  })
+})
+
 describe('applyTradeEdit', () => {
   it('edits reason/strategy without touching numbers', () => {
     const t = trade({ strategy_id: 'a', reasoning: 'salah', entry_at: AT, exit: 110 })

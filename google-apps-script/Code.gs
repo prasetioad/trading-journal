@@ -31,7 +31,7 @@ var SCHEMAS = {
     ['followed_plan', 'b'], ['size_amount', 'n'], ['size_currency', 's'],
     ['entry_price', 'n'], ['take_profit', 'n'], ['stop_loss', 'n'], ['direction', 's'],
     ['exit_price', 'nn'], ['realized_pnl', 'nn'], ['realized_rr', 'nn'], ['status', 's'],
-    ['outcome', 'sn'], ['psychology', 's'], ['reasoning', 's'], ['analyzed_by_ai', 'b'],
+    ['outcome', 'sn'], ['mode', 's'], ['psychology', 's'], ['reasoning', 's'], ['analyzed_by_ai', 'b'],
     ['analyzed_at', 'sn'], ['closed_at', 'sn'], ['created_at', 's'], ['entry_at', 's'],
     ['planned_entry', 'nn'], ['setup_tags', 'arr'], ['market_condition', 'sn'],
     ['confidence', 'nn'], ['risk_pct', 'nn'], ['screenshot_ref', 'sn'], ['mistakes', 'arr'],

@@ -5,23 +5,35 @@ import { money, num, pct, rr } from '../../lib/format'
 import { Badge, Card, ProgressBar, SectionTitle } from '../../components/ui/primitives'
 
 export function StrategyLeagueTable() {
-  const { strategies, journal } = useStore()
+  const { strategies, allJournal } = useStore()
+
+  const btByStrat = useMemo(() => {
+    const m = new Map<string | null, { bt: number; live: number }>()
+    for (const t of allJournal) {
+      if (t.status !== 'closed') continue
+      const cur = m.get(t.strategy_id) ?? { bt: 0, live: 0 }
+      if (t.mode === 'backtest') cur.bt++
+      else cur.live++
+      m.set(t.strategy_id, cur)
+    }
+    return m
+  }, [allJournal])
 
   const rows = useMemo<StrategyStats[]>(() => {
     const s = strategies.map((x) =>
-      strategyStats(x.id, x.name, x.status, x.target_sample_size, journal),
+      strategyStats(x.id, x.name, x.status, x.target_sample_size, allJournal),
     )
-    const noStrat = strategyStats(null, 'Tanpa Strategi / Eksperimen', 'none', 20, journal)
+    const noStrat = strategyStats(null, 'Tanpa Strategi / Eksperimen', 'none', 20, allJournal)
     if (noStrat.closedCount + noStrat.openCount > 0) s.push(noStrat)
     return s.sort((a, b) => b.expectancy - a.expectancy)
-  }, [strategies, journal])
+  }, [strategies, allJournal])
 
   return (
     <Card pad={false}>
       <div className="px-5 pt-5">
         <SectionTitle
           title="Strategy League Table"
-          hint="Peringkat berdasarkan Expectancy — bukan sekadar Win Rate."
+          hint="Peringkat berdasarkan Expectancy. Termasuk trade Backtest Lab (rincian di kolom Sample)."
         />
       </div>
       <div className="overflow-x-auto">
@@ -61,18 +73,26 @@ export function StrategyLeagueTable() {
                     )}
                   </div>
                 </td>
-                <td className="w-[190px] px-3 py-3">
+                <td className="w-[200px] px-3 py-3">
                   <ProgressBar
                     value={r.closedCount}
                     max={r.target}
                     tone={r.sampleReady ? 'brand' : 'warn'}
                   />
-                  <div className="mt-1">
+                  <div className="mt-1 flex items-center gap-2">
                     {r.sampleReady ? (
                       <span className="text-[10px] text-brand">Valid sample</span>
                     ) : (
                       <span className="text-[10px] text-warn">Data belum cukup — uji terus</span>
                     )}
+                    {(() => {
+                      const c = btByStrat.get(r.strategyId ?? null)
+                      return c && c.bt > 0 ? (
+                        <span className="text-[10px] text-ink-mute">
+                          {c.live} live · <span className="text-violet">{c.bt} bt</span>
+                        </span>
+                      ) : null
+                    })()}
                   </div>
                 </td>
                 <td className="px-3 py-3 text-right tnum">{pct(r.winRate)}</td>

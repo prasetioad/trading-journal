@@ -21,7 +21,13 @@ function normalize(raw: unknown): DB {
   const o = (raw ?? {}) as Partial<DB>
   return {
     strategies: Array.isArray(o.strategies) ? o.strategies : [],
-    journal: Array.isArray(o.journal) ? o.journal : [],
+    journal: (Array.isArray(o.journal) ? o.journal : []).map((t) => ({
+      ...t,
+      mode: t.mode === 'backtest' ? 'backtest' : 'live',
+      setup_tags: t.setup_tags ?? [],
+      mistakes: t.mistakes ?? [],
+      entry_at: t.entry_at ?? t.created_at,
+    })),
     analyses: Array.isArray(o.analyses) ? o.analyses : [],
     plans: Array.isArray(o.plans) ? o.plans : [],
   }

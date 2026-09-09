@@ -75,8 +75,13 @@ disimpan sebagai teks `a | b | c`. Jadi datamu tetap enak dibaca/difilter langsu
 di Google Sheets untuk melihat pola.
 
 Kolom penting di tab `journal` untuk analisa pola:
-`entry_at, pair, strategy_id, setup_tags, market_condition, psychology,
+`entry_at, mode, pair, strategy_id, setup_tags, market_condition, psychology,
 followed_plan, risk_pct, confidence, reasoning, realized_pnl, realized_rr, mistakes`.
+
+`mode` = `live` (default) atau `backtest` (dari Backtest Lab — hanya mempengaruhi
+Strategy League Table). Tiap kali `Code.gs` berubah (mis. kolom `mode` atau fitur
+quote ditambah), **wajib re-deploy** Web App-nya (Deploy ▸ Manage deployments ▸
+New version).
 
 ---
 

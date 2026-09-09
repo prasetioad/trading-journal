@@ -128,6 +128,18 @@ untuk pair picker (A11).
 
 ---
 
+### A14 — Backtest Lab  ✅
+- [x] Field `mode: 'live' | 'backtest'` di `JournalEntry` (migrasi backfill `live`).
+- [x] Store: `journal` = live-only, `backtestJournal`, `allJournal`.
+- [x] Halaman `src/pages/BacktestLab.tsx` — alur identik Trading Journal (add/edit/
+  close/reopen/delete + NL search + CSV), tapi trade `mode:'backtest'`.
+- [x] Backtest **hanya** memengaruhi Strategy League Table + Playbook (badge
+  "N live · M bt"). Keluar dari P/L real, Equity, Discipline, Leak, Calendar,
+  Insights, deteksi perilaku, dan live price feed.
+- [x] `Code.gs` schema `journal` + kolom `mode` (re-deploy Web App).
+
+### A13 — IDX price feed  ✅ (lihat commit `feat(stocks)`)
+
 ### A12 — Storage sementara: Google Sheets  ✅
 - [x] `src/lib/sheets.ts` + `google-apps-script/Code.gs` + hybrid di `store.tsx`
   (localStorage = cache instan, Sheet = durable; pull saat boot, push snapshot

@@ -48,6 +48,7 @@ const ROUTES: [string, string][] = [
   ['/insights', 'Insights'],
   ['/playbook', 'Strategy Playbook'],
   ['/journal', 'Trading Journal'],
+  ['/backtest', 'Backtest Lab'],
   ['/plan', 'Trading Plan'],
   ['/analysis', 'My Analysis / Prediction'],
 ]

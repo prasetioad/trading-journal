@@ -57,6 +57,8 @@ Opsional: salin `.env.example` → `.env.local` untuk mengaktifkan Supabase / Cl
 | A10 · CSV import | ✅ |
 | A11 · Journal editable (`updateTrade`, incl. exit-price fix) + searchable crypto pair picker + pattern-view list (per-trade discipline, behavior chips, sessions, sort, group-by-day) | ✅ |
 | A12 · Temporary storage = Google Sheets (Apps Script Web App), localStorage as cache — [docs/google-sheets-storage.md](./docs/google-sheets-storage.md) | ✅ |
+| A13 · Delayed IDX stock feed (Yahoo via Apps Script/CORS proxy) + range-based auto SL/TP close for stock trades | ✅ |
+| A14 · **Backtest Lab** — paper-trade page (`mode: backtest`); feeds only the Strategy League Table / Playbook, excluded from all real-money views & behavior detection | ✅ |
 
 **Track B (butuh kredensial user):** flip ke Supabase + Auth/RLS, screenshot →
 Storage, deploy Edge Function `ai-daily`, provider data IDX. Lihat
@@ -99,12 +101,13 @@ src/
   store/
     repository.ts           localStorage cache + migrate() backfill V2
     repository.supabase.ts  CRUD async row-level (siap, belum di-wire — MIGRATION-SUPABASE.md)
-    store.tsx               Context + semua action (trades, plans) + Sheets sync (hybrid)
+    store.tsx               Context + action; `journal` = live-only, `backtestJournal`,
+                            `allJournal` (League Table); Sheets sync (hybrid)
     prices.tsx              PricesProvider + auto-verify + toast
 google-apps-script/Code.gs  Web App backend untuk Google Sheets (tempel & deploy)
   components/ui/            Card, Badge, ProgressBar, Gauge, StatTile, Modal, Toast, form
   features/{playbook,journal,analysis,dashboard,insights,plan}/
-  pages/                    Dashboard, Insights, Playbook, Journal, Plan, Analysis
+  pages/                    Dashboard, Insights, Playbook, Journal, BacktestLab, Plan, Analysis
   test/factory.ts          Pembuat JournalEntry untuk unit test
 supabase/
   migrations/0001_init.sql       Skema PRD §7 + RLS per-user

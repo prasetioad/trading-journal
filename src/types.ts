@@ -88,6 +88,14 @@ export function sessionOf(iso: string): TradingSession {
 export type TradeStatus = 'open' | 'closed'
 export type TradeOutcome = 'win' | 'lose' | 'breakeven'
 
+/**
+ * `backtest` trades are entered in the Backtest Lab. They behave exactly like a
+ * journal trade (open → close), but only feed the Strategy League Table —
+ * excluded from real P/L, equity, discipline, leak, calendar, insights,
+ * behavior detection and the live price feed. Default `live`.
+ */
+export type TradeMode = 'live' | 'backtest'
+
 export interface JournalEntry {
   id: string
   asset_type: AssetType
@@ -106,6 +114,8 @@ export interface JournalEntry {
   realized_rr: number | null
   status: TradeStatus
   outcome: TradeOutcome | null
+  /** live journal vs Backtest Lab — see TradeMode */
+  mode: TradeMode
   psychology: Psychology
   reasoning: string
   analyzed_by_ai: boolean

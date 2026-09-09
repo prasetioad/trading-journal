@@ -21,6 +21,7 @@ function migrate(db: Partial<DB>): DB {
     plans: db.plans ?? [],
     journal: (db.journal ?? []).map((t) => ({
       ...t,
+      mode: t.mode ?? 'live',
       entry_at: t.entry_at ?? t.created_at,
       planned_entry: t.planned_entry ?? null,
       setup_tags: t.setup_tags ?? [],

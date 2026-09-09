@@ -63,6 +63,7 @@ interface RawTrade {
   h?: number // entry hour (local) — drives session spread
   m?: number // entry minute
   closeMin?: number // minutes after entry the position closed (overrides default)
+  mode?: 'backtest' // omit => live
   asset: 'crypto' | 'stock'
   pair: string
   strat: string | null
@@ -105,6 +106,7 @@ function build(r: RawTrade): JournalEntry {
     realized_rr: null,
     status: 'open',
     outcome: null,
+    mode: r.mode ?? 'live',
     psychology: r.psych,
     reasoning: r.why,
     analyzed_by_ai: false,
@@ -182,6 +184,17 @@ export function seedJournal(): JournalEntry[] {
     // --- Experiment / no strategy ---
     { d: 12, h: 13, asset: 'crypto', pair: 'DOGEUSDT', strat: null, followed: false, size: 300, cur: 'USD', entry: 0.16, tp: 0.19, sl: 0.15, psych: 'Serakah', tags: ['News Play'], mc: 'News event', conf: 3, risk: 1.5, mistakes: ['Tanpa konfirmasi'], why: 'Eksperimen ikut hype meme, tanpa setup jelas.', exit: 0.15 },
     { d: 7, h: 14, asset: 'crypto', pair: 'PEPEUSDT', strat: null, followed: false, size: 250, cur: 'USD', entry: 0.0000102, tp: 0.0000125, sl: 0.0000098, psych: 'FOMO', tags: ['News Play'], mc: 'News event', conf: 2, risk: 1.5, mistakes: ['Abaikan news', 'Tanpa konfirmasi'], why: 'FOMO listing news, masuk market order.', exit: 0.0000098 },
+
+    // --- Backtest Lab: extra Breakout Retest samples on historical data ---
+    // (mode:'backtest' → feeds ONLY the Strategy League Table, not P/L/dashboard)
+    { d: 46, mode: 'backtest', asset: 'crypto', pair: 'BTCUSDT', strat: S_BREAKOUT, followed: true, size: 1000, cur: 'USD', entry: 58000, tp: 61500, sl: 56800, psych: 'Netral', tags: ['Breakout', 'Retest'], mc: 'Trending', why: 'Backtest: break 57.8k, retest bersih.', exit: 61500 },
+    { d: 44, mode: 'backtest', asset: 'crypto', pair: 'ETHUSDT', strat: S_BREAKOUT, followed: true, size: 800, cur: 'USD', entry: 3100, tp: 3280, sl: 3030, psych: 'Netral', tags: ['Breakout'], mc: 'Trending', why: 'Backtest: retest range high 3.1k.', exit: 3030 },
+    { d: 42, mode: 'backtest', asset: 'crypto', pair: 'SOLUSDT', strat: S_BREAKOUT, followed: true, size: 600, cur: 'USD', entry: 132, tp: 148, sl: 126, psych: 'Netral', tags: ['Breakout', 'Retest'], mc: 'Trending', why: 'Backtest: descending resistance break.', exit: 148 },
+    { d: 39, mode: 'backtest', asset: 'stock', pair: 'BBCA', strat: S_BREAKOUT, followed: true, size: 15000000, cur: 'IDR', entry: 9200, tp: 9600, sl: 9060, psych: 'Netral', tags: ['Breakout'], mc: 'Trending', why: 'Backtest: break konsolidasi, volume valid.', exit: 9600 },
+    { d: 37, mode: 'backtest', asset: 'crypto', pair: 'BTCUSDT', strat: S_BREAKOUT, followed: true, size: 1000, cur: 'USD', entry: 60500, tp: 63000, sl: 59400, psych: 'Netral', tags: ['Breakout', 'Retest'], mc: 'Ranging', why: 'Backtest: retest gagal, fakeout.', exit: 59400 },
+    { d: 34, mode: 'backtest', asset: 'crypto', pair: 'BNBUSDT', strat: S_BREAKOUT, followed: true, size: 500, cur: 'USD', entry: 520, tp: 560, sl: 505, psych: 'Netral', tags: ['Breakout'], mc: 'Trending', why: 'Backtest: break weekly, retest cepat.', exit: 560 },
+    { d: 31, mode: 'backtest', asset: 'crypto', pair: 'ETHUSDT', strat: S_BREAKOUT, followed: true, size: 800, cur: 'USD', entry: 3250, tp: 3450, sl: 3170, psych: 'Netral', tags: ['Breakout', 'Retest'], mc: 'Trending', why: 'Backtest: retest neckline, R:R 2.5.', exit: 3450 },
+    { d: 29, mode: 'backtest', asset: 'stock', pair: 'BBRI', strat: S_BREAKOUT, followed: true, size: 12000000, cur: 'IDR', entry: 4650, tp: 4900, sl: 4560, psych: 'Netral', tags: ['Breakout'], mc: 'Ranging', why: 'Backtest: break downtrend line, retest.', exit: 4560 },
   ]
   return raw.map(build)
 }

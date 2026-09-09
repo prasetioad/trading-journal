@@ -10,12 +10,14 @@ import Journal from './pages/Journal'
 import Analysis from './pages/Analysis'
 import Insights from './pages/Insights'
 import Plan from './pages/Plan'
+import BacktestLab from './pages/BacktestLab'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: '▚' },
   { to: '/insights', label: 'Insights', icon: '✦' },
   { to: '/playbook', label: 'Strategy Playbook', icon: '❐' },
   { to: '/journal', label: 'Trading Journal', icon: '≣' },
+  { to: '/backtest', label: 'Backtest Lab', icon: '⌗' },
   { to: '/plan', label: 'Trading Plan', icon: '◔' },
   { to: '/analysis', label: 'My Analysis', icon: '◈' },
 ]
@@ -65,7 +67,11 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <button
           className="btn btn-ghost w-full text-xs"
           onClick={() => {
-            if (confirm('Hapus semua data? Ini juga mengosongkan Google Sheet jika tersambung.'))
+            if (
+              confirm(
+                'Hapus semua data (termasuk Backtest Lab)? Ini juga mengosongkan Google Sheet jika tersambung.',
+              )
+            )
               clearAll()
           }}
         >
@@ -123,6 +129,7 @@ export default function App() {
             <Route path="/insights" element={<Insights />} />
             <Route path="/playbook" element={<Playbook />} />
             <Route path="/journal" element={<Journal />} />
+            <Route path="/backtest" element={<BacktestLab />} />
             <Route path="/plan" element={<Plan />} />
             <Route path="/analysis" element={<Analysis />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Analysis, JournalEntry, Strategy, TradingPlan } from '../types'
+import type { Analysis, JournalEntry, Strategy, TradeMode, TradingPlan } from '../types'
 import { repository, type DB } from './repository'
 import { uid } from '../lib/format'
 import { applyTradeEdit, direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
@@ -25,11 +25,12 @@ type JournalInput = Omit<
   | 'realized_rr'
   | 'status'
   | 'outcome'
+  | 'mode'
   | 'analyzed_by_ai'
   | 'analyzed_at'
   | 'closed_at'
   | 'created_at'
-> & { entry_at?: string }
+> & { entry_at?: string; mode?: TradeMode }
 type AnalysisInput = Omit<
   Analysis,
   'id' | 'status' | 'resolved_at' | 'analyzed_by_ai' | 'created_at'
@@ -38,7 +39,12 @@ type PlanInput = Omit<TradingPlan, 'id' | 'created_at'>
 
 interface StoreValue {
   strategies: Strategy[]
+  /** live trades only — every real-money view uses this */
   journal: JournalEntry[]
+  /** Backtest Lab trades only */
+  backtestJournal: JournalEntry[]
+  /** live + backtest — only the Strategy League Table / Playbook use this */
+  allJournal: JournalEntry[]
   analyses: Analysis[]
   plans: TradingPlan[]
   // strategies
@@ -160,6 +166,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       realized_rr: null,
       status: 'open',
       outcome: null,
+      mode: t.mode ?? 'live',
       analyzed_by_ai: false,
       analyzed_at: null,
       closed_at: null,
@@ -167,9 +174,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       entry_at: t.entry_at ?? now(),
     })
 
+    const liveJournal = db.journal.filter((t) => t.mode !== 'backtest')
+    const backtestJournal = db.journal.filter((t) => t.mode === 'backtest')
+
     return {
       strategies: db.strategies,
-      journal: db.journal,
+      journal: liveJournal,
+      backtestJournal,
+      allJournal: db.journal,
       analyses: db.analyses,
       plans: db.plans,
 
