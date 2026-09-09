@@ -7,11 +7,15 @@ import Dashboard from './pages/Dashboard'
 import Playbook from './pages/Playbook'
 import Journal from './pages/Journal'
 import Analysis from './pages/Analysis'
+import Insights from './pages/Insights'
+import Plan from './pages/Plan'
 
 const NAV = [
   { to: '/dashboard', label: 'Dashboard', icon: '▚' },
+  { to: '/insights', label: 'Insights', icon: '✦' },
   { to: '/playbook', label: 'Strategy Playbook', icon: '❐' },
   { to: '/journal', label: 'Trading Journal', icon: '≣' },
+  { to: '/plan', label: 'Trading Plan', icon: '◔' },
   { to: '/analysis', label: 'My Analysis', icon: '◈' },
 ]
 
@@ -109,8 +113,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/insights" element={<Insights />} />
             <Route path="/playbook" element={<Playbook />} />
             <Route path="/journal" element={<Journal />} />
+            <Route path="/plan" element={<Plan />} />
             <Route path="/analysis" element={<Analysis />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
