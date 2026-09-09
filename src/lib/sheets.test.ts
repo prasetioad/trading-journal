@@ -10,7 +10,9 @@ describe('sheets helpers', () => {
     expect(isEmpty({ ...empty, plans: [{} as never] })).toBe(false)
   })
 
-  it('sheetsEnabled is false without VITE_SHEETS_WEBAPP_URL', () => {
-    expect(sheetsEnabled()).toBe(false)
+  it('sheetsEnabled returns a boolean that matches the configured URL', () => {
+    const url = (import.meta.env.VITE_SHEETS_WEBAPP_URL as string | undefined)?.trim() || ''
+    const expected = /\/macros\/s\//.test(url) || /^https:\/\/script\.google(usercontent)?\.com\//.test(url)
+    expect(sheetsEnabled()).toBe(expected)
   })
 })
