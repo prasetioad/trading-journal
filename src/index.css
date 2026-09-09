@@ -1,0 +1,129 @@
+@import 'tailwindcss';
+
+/* ---- Trading Cockpit theme (dark premium) ---- */
+@theme {
+  --color-bg: #070a10;
+  --color-surface: #0d121c;
+  --color-surface-2: #131a27;
+  --color-border: #1e2634;
+  --color-border-soft: #171f2c;
+  --color-ink: #e6ebf2;
+  --color-ink-soft: #9aa7ba;
+  --color-ink-mute: #64748b;
+
+  --color-brand: #34d399;
+  --color-brand-dim: #10b981;
+  --color-win: #34d399;
+  --color-lose: #f87171;
+  --color-warn: #fbbf24;
+  --color-info: #60a5fa;
+  --color-violet: #a78bfa;
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* number columns / prices */
+.tnum {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #223049;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+}
+
+.field {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-ink);
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.field:focus {
+  border-color: var(--color-brand-dim);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-brand) 18%, transparent);
+}
+.field::placeholder {
+  color: var(--color-ink-mute);
+}
+.label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+  margin-bottom: 0.3rem;
+  display: block;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 10px;
+  padding: 0.55rem 0.95rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.08s, background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.btn:active {
+  transform: translateY(1px);
+}
+.btn-primary {
+  background: var(--color-brand-dim);
+  color: #04120c;
+}
+.btn-primary:hover {
+  background: var(--color-brand);
+}
+.btn-ghost {
+  background: var(--color-surface-2);
+  border-color: var(--color-border);
+  color: var(--color-ink);
+}
+.btn-ghost:hover {
+  border-color: #33415a;
+}
+.btn-danger {
+  background: color-mix(in oklab, var(--color-lose) 16%, transparent);
+  color: var(--color-lose);
+  border-color: color-mix(in oklab, var(--color-lose) 40%, transparent);
+}

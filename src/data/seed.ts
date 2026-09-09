@@ -1,0 +1,214 @@
+// Demo dataset for the prototype. Mirrors realistic trader behaviour: a couple of
+// strategies mid-sample, disciplined winners, and a few emotional leaks.
+import type { Analysis, JournalEntry, Psychology, Strategy } from '../types'
+import { direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
+
+const S_BREAKOUT = 'seed-strat-breakout'
+const S_SND = 'seed-strat-snd'
+const S_EMA = 'seed-strat-ema'
+
+function daysAgo(n: number, hour = 15) {
+  const d = new Date()
+  d.setDate(d.getDate() - n)
+  d.setHours(hour, 12, 0, 0)
+  return d.toISOString()
+}
+
+export function seedStrategies(): Strategy[] {
+  return [
+    {
+      id: S_BREAKOUT,
+      name: 'Breakout Retest',
+      description:
+        'Entry saat harga break level kunci lalu retest sebagai support/resistance baru. Konfirmasi: volume naik + close di atas level. Exit: SL di bawah retest, TP di swing high berikutnya.',
+      target_sample_size: 20,
+      status: 'testing',
+      created_at: daysAgo(40),
+      updated_at: daysAgo(2),
+    },
+    {
+      id: S_SND,
+      name: 'Supply-Demand Reversal',
+      description:
+        'Entry di zona supply/demand H4 yang belum ter-mitigasi. Konfirmasi: rejection wick + BOS di LTF. SL di luar zona, TP di zona berlawanan terdekat.',
+      target_sample_size: 20,
+      status: 'testing',
+      created_at: daysAgo(35),
+      updated_at: daysAgo(3),
+    },
+    {
+      id: S_EMA,
+      name: 'Trend Following EMA',
+      description:
+        'Hanya trade searah EMA200. Entry pullback ke EMA20/50 saat struktur HH-HL. SL di HL terakhir, TP trailing di bawah EMA20.',
+      target_sample_size: 15,
+      status: 'archived',
+      created_at: daysAgo(90),
+      updated_at: daysAgo(20),
+    },
+  ]
+}
+
+interface RawTrade {
+  d: number
+  asset: 'crypto' | 'stock'
+  pair: string
+  strat: string | null
+  followed: boolean
+  size: number
+  cur: 'IDR' | 'USD'
+  entry: number
+  tp: number
+  sl: number
+  psych: Psychology
+  why: string
+  exit?: number // present => closed
+  open?: boolean
+}
+
+function build(r: RawTrade): JournalEntry {
+  const base: JournalEntry = {
+    id: `seed-tr-${r.d}-${r.pair}`,
+    asset_type: r.asset,
+    pair: r.pair,
+    strategy_id: r.strat,
+    followed_plan: r.followed,
+    size_amount: r.size,
+    size_currency: r.cur,
+    entry_price: r.entry,
+    take_profit: r.tp,
+    stop_loss: r.sl,
+    direction: direction(r.entry, r.tp),
+    exit_price: null,
+    realized_pnl: null,
+    realized_rr: null,
+    status: 'open',
+    outcome: null,
+    psychology: r.psych,
+    reasoning: r.why,
+    analyzed_by_ai: false,
+    analyzed_at: null,
+    closed_at: null,
+    created_at: daysAgo(r.d, 9),
+  }
+  if (r.open || r.exit == null) return base
+  const pnl = realizedPnl(base, r.exit)
+  return {
+    ...base,
+    status: 'closed',
+    exit_price: r.exit,
+    realized_pnl: pnl,
+    realized_rr: realizedRR(base, r.exit),
+    outcome: outcomeOf(pnl),
+    analyzed_by_ai: r.d > 3,
+    analyzed_at: r.d > 3 ? daysAgo(r.d - 1, 17) : null,
+    closed_at: daysAgo(r.d, 15),
+  }
+}
+
+export function seedJournal(): JournalEntry[] {
+  const raw: RawTrade[] = [
+    // --- Breakout Retest: disciplined sample in progress ---
+    { d: 30, asset: 'crypto', pair: 'BTCUSDT', strat: S_BREAKOUT, followed: true, size: 1000, cur: 'USD', entry: 61000, tp: 64000, sl: 60000, psych: 'Percaya diri', why: 'Break weekly resistance 60.8k, retest bersih, volume ekspansi.', exit: 64000 },
+    { d: 28, asset: 'crypto', pair: 'ETHUSDT', strat: S_BREAKOUT, followed: true, size: 800, cur: 'USD', entry: 3400, tp: 3600, sl: 3320, psych: 'Sabar', why: 'Retest 3.4k after range break, higher low intact.', exit: 3320 },
+    { d: 25, asset: 'stock', pair: 'BBCA', strat: S_BREAKOUT, followed: true, size: 15000000, cur: 'IDR', entry: 9700, tp: 10100, sl: 9575, psych: 'Netral', why: 'Break ATH 9.675, retest dengan volume tipis tapi valid.', exit: 10100 },
+    { d: 22, asset: 'crypto', pair: 'SOLUSDT', strat: S_BREAKOUT, followed: true, size: 600, cur: 'USD', entry: 145, tp: 158, sl: 140, psych: 'Percaya diri', why: 'Descending resistance break + retest, target swing high.', exit: 152 },
+    { d: 18, asset: 'crypto', pair: 'BTCUSDT', strat: S_BREAKOUT, followed: false, size: 1500, cur: 'USD', entry: 66000, tp: 68000, sl: 65200, psych: 'FOMO', why: 'Belum retest tapi takut ketinggalan candle besar, entry di tengah range.', exit: 65200 },
+    { d: 14, asset: 'stock', pair: 'BBRI', strat: S_BREAKOUT, followed: true, size: 12000000, cur: 'IDR', entry: 4900, tp: 5150, sl: 4820, psych: 'Sabar', why: 'Retest neckline inverse H&S, konfirmasi close H4.', exit: 5150 },
+    { d: 10, asset: 'crypto', pair: 'ETHUSDT', strat: S_BREAKOUT, followed: true, size: 900, cur: 'USD', entry: 3550, tp: 3750, sl: 3470, psych: 'Netral', why: 'Retest 3.55k breakout, SL di bawah struktur.', exit: 3470 },
+    { d: 6, asset: 'crypto', pair: 'SOLUSDT', strat: S_BREAKOUT, followed: true, size: 700, cur: 'USD', entry: 150, tp: 165, sl: 144, psych: 'Percaya diri', why: 'Break konsolidasi mingguan, retest cepat, ambil sebagian di 158.', exit: 158 },
+    { d: 2, asset: 'crypto', pair: 'BTCUSDT', strat: S_BREAKOUT, followed: true, size: 1200, cur: 'USD', entry: 63000, tp: 66500, sl: 61800, psych: 'Sabar', why: 'Retest range high, R:R > 1:2.5, tunggu konfirmasi 4H.', exit: 66500 },
+    { d: 1, asset: 'stock', pair: 'TLKM', strat: S_BREAKOUT, followed: true, size: 10000000, cur: 'IDR', entry: 3150, tp: 3320, sl: 3080, psych: 'Netral', why: 'Break downtrend line, retest sebagai support.', open: true },
+
+    // --- Supply-Demand Reversal: rougher, some emotional leaks ---
+    { d: 27, asset: 'crypto', pair: 'BNBUSDT', strat: S_SND, followed: true, size: 500, cur: 'USD', entry: 560, tp: 600, sl: 545, psych: 'Ragu-ragu', why: 'Demand H4 belum mitigasi, rejection wick jelas.', exit: 600 },
+    { d: 24, asset: 'crypto', pair: 'ETHUSDT', strat: S_SND, followed: false, size: 1000, cur: 'USD', entry: 3300, tp: 3450, sl: 3255, psych: 'Balas dendam', why: 'Baru loss di trade sebelumnya, langsung masuk lagi tanpa BOS.', exit: 3255 },
+    { d: 21, asset: 'stock', pair: 'ASII', strat: S_SND, followed: true, size: 8000000, cur: 'IDR', entry: 5100, tp: 5400, sl: 4980, psych: 'Sabar', why: 'Supply weekly, entry di zona, TP di demand bawah.', exit: 4980 },
+    { d: 17, asset: 'crypto', pair: 'BTCUSDT', strat: S_SND, followed: false, size: 2000, cur: 'USD', entry: 64500, tp: 66000, sl: 63800, psych: 'FOMO', why: 'Lihat orang lain profit di TF kecil, ikut masuk padahal bukan zona saya.', exit: 63800 },
+    { d: 13, asset: 'crypto', pair: 'SOLUSDT', strat: S_SND, followed: true, size: 600, cur: 'USD', entry: 155, tp: 172, sl: 148, psych: 'Percaya diri', why: 'Demand daily fresh, konfirmasi BOS M15.', exit: 172 },
+    { d: 9, asset: 'crypto', pair: 'ETHUSDT', strat: S_SND, followed: true, size: 800, cur: 'USD', entry: 3600, tp: 3820, sl: 3520, psych: 'Sabar', why: 'Demand H4, rejection + BOS, tahan sampai TP1.', exit: 3700 },
+    { d: 5, asset: 'crypto', pair: 'BNBUSDT', strat: S_SND, followed: false, size: 1200, cur: 'USD', entry: 590, tp: 620, sl: 575, psych: 'Balas dendam', why: 'Revenge setelah SL beruntun, size digedein 2x, tanpa rencana exit.', exit: 575 },
+    { d: 3, asset: 'stock', pair: 'BBCA', strat: S_SND, followed: true, size: 9000000, cur: 'IDR', entry: 10200, tp: 10600, sl: 10050, psych: 'Netral', why: 'Demand H4 di 10.2k, target supply 10.6k.', exit: 10600 },
+    { d: 1, asset: 'crypto', pair: 'BTCUSDT', strat: S_SND, followed: true, size: 800, cur: 'USD', entry: 72000, tp: 135000, sl: 55000, psych: 'Sabar', why: 'Demand weekly, posisi swing jangka panjang — target siklus, SL di bawah struktur makro.', open: true },
+    { d: 1, asset: 'crypto', pair: 'ETHUSDT', strat: S_BREAKOUT, followed: true, size: 500, cur: 'USD', entry: 2600, tp: 5200, sl: 1900, psych: 'Netral', why: 'Retest range besar, hold swing. TP di ATH lama, SL di bawah demand makro.', open: true },
+
+    // --- Archived EMA strategy: historical ---
+    { d: 60, asset: 'crypto', pair: 'BTCUSDT', strat: S_EMA, followed: true, size: 1000, cur: 'USD', entry: 52000, tp: 56000, sl: 50500, psych: 'Percaya diri', why: 'Pullback EMA50 dalam uptrend, HH-HL utuh.', exit: 56000 },
+    { d: 55, asset: 'crypto', pair: 'ETHUSDT', strat: S_EMA, followed: true, size: 800, cur: 'USD', entry: 2900, tp: 3100, sl: 2830, psych: 'Sabar', why: 'Pullback EMA20, lanjut trend.', exit: 2830 },
+    { d: 48, asset: 'crypto', pair: 'SOLUSDT', strat: S_EMA, followed: true, size: 500, cur: 'USD', entry: 110, tp: 128, sl: 104, psych: 'Netral', why: 'Trend kuat, pullback dangkal ke EMA20.', exit: 128 },
+
+    // --- Experiment / no strategy ---
+    { d: 12, asset: 'crypto', pair: 'DOGEUSDT', strat: null, followed: false, size: 300, cur: 'USD', entry: 0.16, tp: 0.19, sl: 0.15, psych: 'Serakah', why: 'Eksperimen ikut hype meme, tanpa setup jelas.', exit: 0.15 },
+    { d: 7, asset: 'crypto', pair: 'PEPEUSDT', strat: null, followed: false, size: 250, cur: 'USD', entry: 0.0000102, tp: 0.0000125, sl: 0.0000098, psych: 'FOMO', why: 'FOMO listing news, masuk market order.', exit: 0.0000098 },
+  ]
+  return raw.map(build)
+}
+
+export function seedAnalyses(): Analysis[] {
+  return [
+    {
+      id: 'seed-an-1',
+      pair: 'BTCUSDT',
+      asset_type: 'crypto',
+      bias: 'bullish',
+      support: 74000,
+      resistance: 100000,
+      target_price: 150000,
+      invalidation_price: 52000,
+      technique_tags: ['Market Structure', 'Demand Zone', 'Fibonacci'],
+      notes: 'Selama di atas 52k struktur makro masih bullish. Target ekspansi siklus di 150k.',
+      status: 'pending',
+      resolved_at: null,
+      analyzed_by_ai: false,
+      created_at: daysAgo(2, 10),
+    },
+    {
+      id: 'seed-an-2',
+      pair: 'BBRI',
+      asset_type: 'stock',
+      bias: 'bullish',
+      support: 4800,
+      resistance: 5150,
+      target_price: 5400,
+      invalidation_price: 4720,
+      technique_tags: ['Inverse H&S', 'Volume'],
+      notes: 'Neckline 4.9k, target measured move 5.4k.',
+      status: 'success',
+      resolved_at: daysAgo(9, 15),
+      analyzed_by_ai: true,
+      created_at: daysAgo(16, 10),
+    },
+    {
+      id: 'seed-an-3',
+      pair: 'ETHUSDT',
+      asset_type: 'crypto',
+      bias: 'bearish',
+      support: 3200,
+      resistance: 3600,
+      target_price: 3050,
+      invalidation_price: 3660,
+      technique_tags: ['Supply Zone', 'RSI Divergence'],
+      notes: 'Bearish divergence H4 di supply 3.6k. Invalidation jika close di atas 3.66k.',
+      status: 'fail',
+      resolved_at: daysAgo(6, 12),
+      analyzed_by_ai: true,
+      created_at: daysAgo(12, 10),
+    },
+    {
+      id: 'seed-an-4',
+      pair: 'SOLUSDT',
+      asset_type: 'crypto',
+      bias: 'bullish',
+      support: 95,
+      resistance: 260,
+      target_price: 400,
+      invalidation_price: 60,
+      technique_tags: ['Breakout', 'Trend Following'],
+      notes: 'Selama bertahan di atas 60, skenario ekspansi menuju 400 masih valid.',
+      status: 'pending',
+      resolved_at: null,
+      analyzed_by_ai: false,
+      created_at: daysAgo(1, 11),
+    },
+  ]
+}

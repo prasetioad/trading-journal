@@ -1,0 +1,76 @@
+import { useState } from 'react'
+import type { Strategy, StrategyStatus } from '../../types'
+import { Fieldset, FormRow, NumberInput, SegmentedField, TextArea, TextInput } from '../../components/ui/form'
+
+export interface StrategyDraft {
+  name: string
+  description: string
+  target_sample_size: number
+  status: StrategyStatus
+}
+
+export function StrategyForm({
+  initial,
+  onSubmit,
+  onCancel,
+}: {
+  initial?: Strategy
+  onSubmit: (d: StrategyDraft) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initial?.name ?? '')
+  const [description, setDescription] = useState(initial?.description ?? '')
+  const [target, setTarget] = useState(initial?.target_sample_size ?? 20)
+  const [status, setStatus] = useState<StrategyStatus>(initial?.status ?? 'testing')
+
+  const valid = name.trim().length > 1 && target > 0
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!valid) return
+        onSubmit({ name: name.trim(), description: description.trim(), target_sample_size: target, status })
+      }}
+      className="space-y-4"
+    >
+      <FormRow label="Nama Strategi" hint="Mis. Breakout Retest, Supply-Demand Reversal, SnR Bounce">
+        <TextInput value={name} onChange={(e) => setName(e.target.value)} placeholder="Breakout Retest" autoFocus />
+      </FormRow>
+
+      <FormRow label="Deskripsi & SOP" hint="Aturan entry, konfirmasi, dan exit">
+        <TextArea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Entry saat harga retest level breakout dengan volume naik. SL di bawah retest. TP di swing high berikutnya."
+        />
+      </FormRow>
+
+      <Fieldset>
+        <FormRow label="Target Sample Size" hint="Default 20 trade — komitmen uji sebelum menilai strategi">
+          <NumberInput value={target} min={1} onChange={(e) => setTarget(Number(e.target.value))} />
+        </FormRow>
+        <FormRow label="Status">
+          <SegmentedField<StrategyStatus>
+            value={status}
+            onChange={setStatus}
+            options={[
+              { value: 'testing', label: 'Testing' },
+              { value: 'active', label: 'Active' },
+              { value: 'archived', label: 'Archived' },
+            ]}
+          />
+        </FormRow>
+      </Fieldset>
+
+      <div className="flex justify-end gap-2 pt-1">
+        <button type="button" className="btn btn-ghost" onClick={onCancel}>
+          Batal
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={!valid}>
+          {initial ? 'Simpan perubahan' : 'Tambah strategi'}
+        </button>
+      </div>
+    </form>
+  )
+}
