@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
-import type { Analysis, JournalEntry, Strategy } from '../types'
+import type { Analysis, JournalEntry, Strategy, TradingPlan } from '../types'
 import { repository, type DB } from './repository'
 import { uid } from '../lib/format'
 import { direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
@@ -18,23 +18,26 @@ type JournalInput = Omit<
   | 'analyzed_at'
   | 'closed_at'
   | 'created_at'
->
+> & { entry_at?: string }
 type AnalysisInput = Omit<
   Analysis,
   'id' | 'status' | 'resolved_at' | 'analyzed_by_ai' | 'created_at'
 >
+type PlanInput = Omit<TradingPlan, 'id' | 'created_at'>
 
 interface StoreValue {
   strategies: Strategy[]
   journal: JournalEntry[]
   analyses: Analysis[]
+  plans: TradingPlan[]
   // strategies
   addStrategy: (s: StrategyInput) => void
   updateStrategy: (id: string, patch: Partial<StrategyInput>) => void
   deleteStrategy: (id: string) => void
   // journal
   addTrade: (t: JournalInput) => void
-  closeTrade: (id: string, exitPrice: number) => void
+  addTrades: (ts: JournalInput[]) => void
+  closeTrade: (id: string, exitPrice: number, extra?: { mistakes?: string[] }) => void
   reopenTrade: (id: string) => void
   deleteTrade: (id: string) => void
   markAnalyzed: (ids: string[]) => void
@@ -42,6 +45,10 @@ interface StoreValue {
   addAnalysis: (a: AnalysisInput) => void
   resolveAnalysis: (id: string, status: 'success' | 'fail' | 'pending') => void
   deleteAnalysis: (id: string) => void
+  // plans
+  addPlan: (p: PlanInput) => void
+  updatePlan: (id: string, patch: Partial<PlanInput>) => void
+  deletePlan: (id: string) => void
   // admin
   resetDemo: () => void
   clearAll: () => void
@@ -60,10 +67,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<StoreValue>(() => {
     const now = () => new Date().toISOString()
 
+    const mkTrade = (t: JournalInput): JournalEntry => ({
+      ...t,
+      id: uid(),
+      direction: direction(t.entry_price, t.take_profit),
+      exit_price: null,
+      realized_pnl: null,
+      realized_rr: null,
+      status: 'open',
+      outcome: null,
+      analyzed_by_ai: false,
+      analyzed_at: null,
+      closed_at: null,
+      created_at: now(),
+      entry_at: t.entry_at ?? now(),
+    })
+
     return {
       strategies: db.strategies,
       journal: db.journal,
       analyses: db.analyses,
+      plans: db.plans,
 
       addStrategy: (s) =>
         commit({
@@ -91,29 +115,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ),
         }),
 
-      addTrade: (t) =>
-        commit({
-          ...db,
-          journal: [
-            {
-              ...t,
-              id: uid(),
-              direction: direction(t.entry_price, t.take_profit),
-              exit_price: null,
-              realized_pnl: null,
-              realized_rr: null,
-              status: 'open',
-              outcome: null,
-              analyzed_by_ai: false,
-              analyzed_at: null,
-              closed_at: null,
-              created_at: now(),
-            },
-            ...db.journal,
-          ],
-        }),
+      addTrade: (t) => commit({ ...db, journal: [mkTrade(t), ...db.journal] }),
 
-      closeTrade: (id, exitPrice) =>
+      addTrades: (ts) =>
+        commit({ ...db, journal: [...ts.map(mkTrade), ...db.journal] }),
+
+      closeTrade: (id, exitPrice, extra) =>
         commit({
           ...db,
           journal: db.journal.map((t) => {
@@ -127,6 +134,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               realized_rr: realizedRR(t, exitPrice),
               outcome: outcomeOf(pnl),
               closed_at: now(),
+              mistakes: extra?.mistakes ?? t.mistakes,
             }
           }),
         }),
@@ -191,6 +199,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
       deleteAnalysis: (id) =>
         commit({ ...db, analyses: db.analyses.filter((x) => x.id !== id) }),
+
+      addPlan: (p) =>
+        commit({
+          ...db,
+          plans: [
+            { ...p, id: uid(), created_at: now() },
+            ...db.plans.filter((x) => x.plan_date !== p.plan_date),
+          ],
+        }),
+
+      updatePlan: (id, patch) =>
+        commit({
+          ...db,
+          plans: db.plans.map((x) => (x.id === id ? { ...x, ...patch } : x)),
+        }),
+
+      deletePlan: (id) => commit({ ...db, plans: db.plans.filter((x) => x.id !== id) }),
 
       resetDemo: () => commit(repository.reset()),
       clearAll: () => commit(repository.clear()),

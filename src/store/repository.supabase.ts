@@ -5,7 +5,7 @@
 // switches from whole-DB snapshots to these per-row async calls.
 //
 // Table/column names match /supabase/migrations/0001_init.sql exactly.
-import type { Analysis, JournalEntry, Strategy } from '../types'
+import type { Analysis, JournalEntry, Strategy, TradingPlan } from '../types'
 import { supabase } from '../lib/supabase'
 
 function db() {
@@ -48,6 +48,27 @@ const toJournal = (r: Record<string, unknown>): JournalEntry => ({
   analyzed_at: (r.analyzed_at as string) ?? null,
   closed_at: (r.closed_at as string) ?? null,
   created_at: r.created_at as string,
+  entry_at: (r.entry_at as string) ?? (r.created_at as string),
+  planned_entry: r.planned_entry == null ? null : Number(r.planned_entry),
+  setup_tags: (r.setup_tags as string[]) ?? [],
+  market_condition: (r.market_condition as JournalEntry['market_condition']) ?? null,
+  confidence: r.confidence == null ? null : Number(r.confidence),
+  risk_pct: r.risk_pct == null ? null : Number(r.risk_pct),
+  screenshot_ref: (r.screenshot_ref as string) ?? null,
+  mistakes: (r.mistakes as string[]) ?? [],
+})
+
+const toPlan = (r: Record<string, unknown>): TradingPlan => ({
+  id: r.id as string,
+  plan_date: r.plan_date as string,
+  bias: r.bias as TradingPlan['bias'],
+  key_levels: ((r.key_levels as unknown[]) ?? []).map(Number),
+  allowed_setups: (r.allowed_setups as string[]) ?? [],
+  max_trades: Number(r.max_trades ?? 3),
+  max_daily_loss_r: Number(r.max_daily_loss_r ?? 2),
+  no_trade_rules: (r.no_trade_rules as string[]) ?? [],
+  notes: (r.notes as string) ?? '',
+  created_at: r.created_at as string,
 })
 
 const toAnalysis = (r: Record<string, unknown>): Analysis => ({
@@ -71,18 +92,21 @@ const toAnalysis = (r: Record<string, unknown>): Analysis => ({
 
 export async function fetchAll() {
   const c = db()
-  const [s, j, a] = await Promise.all([
+  const [s, j, a, p] = await Promise.all([
     c.from('user_strategies').select('*').order('created_at', { ascending: false }),
     c.from('journal_entries').select('*').order('created_at', { ascending: false }),
     c.from('analyses').select('*').order('created_at', { ascending: false }),
+    c.from('trading_plans').select('*').order('plan_date', { ascending: false }),
   ])
   if (s.error) throw s.error
   if (j.error) throw j.error
   if (a.error) throw a.error
+  if (p.error) throw p.error
   return {
     strategies: (s.data ?? []).map(toStrategy),
     journal: (j.data ?? []).map(toJournal),
     analyses: (a.data ?? []).map(toAnalysis),
+    plans: (p.data ?? []).map(toPlan),
   }
 }
 
@@ -129,6 +153,14 @@ export async function insertTrade(userId: string, t: Partial<JournalEntry>) {
       stop_loss: t.stop_loss,
       psychology: t.psychology,
       reasoning: t.reasoning,
+      entry_at: t.entry_at,
+      planned_entry: t.planned_entry,
+      setup_tags: t.setup_tags ?? [],
+      market_condition: t.market_condition,
+      confidence: t.confidence,
+      risk_pct: t.risk_pct,
+      screenshot_ref: t.screenshot_ref,
+      mistakes: t.mistakes ?? [],
       status: 'open',
     })
     .select()
@@ -166,5 +198,35 @@ export async function patchAnalysis(id: string, patch: Partial<Analysis>) {
 
 export async function deleteAnalysis(id: string) {
   const { error } = await db().from('analyses').delete().eq('id', id)
+  if (error) throw error
+}
+
+/* ---------- trading plans ---------- */
+
+export async function upsertPlan(userId: string, p: Partial<TradingPlan>) {
+  const { data, error } = await db()
+    .from('trading_plans')
+    .upsert(
+      {
+        user_id: userId,
+        plan_date: p.plan_date,
+        bias: p.bias,
+        key_levels: p.key_levels ?? [],
+        allowed_setups: p.allowed_setups ?? [],
+        max_trades: p.max_trades,
+        max_daily_loss_r: p.max_daily_loss_r,
+        no_trade_rules: p.no_trade_rules ?? [],
+        notes: p.notes ?? '',
+      },
+      { onConflict: 'user_id,plan_date' },
+    )
+    .select()
+    .single()
+  if (error) throw error
+  return toPlan(data)
+}
+
+export async function deletePlan(id: string) {
+  const { error } = await db().from('trading_plans').delete().eq('id', id)
   if (error) throw error
 }
