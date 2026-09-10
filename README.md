@@ -59,6 +59,7 @@ Opsional: salin `.env.example` → `.env.local` untuk mengaktifkan Supabase / Cl
 | A12 · Temporary storage = Google Sheets (Apps Script Web App), localStorage as cache — [docs/google-sheets-storage.md](./docs/google-sheets-storage.md) | ✅ |
 | A13 · Delayed IDX stock feed (Yahoo via Apps Script/CORS proxy) + range-based auto SL/TP close for stock trades | ✅ |
 | A14 · **Backtest Lab** — paper-trade page (`mode: backtest`); feeds only the Strategy League Table / Playbook, excluded from all real-money views & behavior detection | ✅ |
+| A15 · Backtest Lab live price + unrealized P/L · **Strategy entry-rule checklist** (`Strategy.entry_rules`, per-trade `rule_checks` snapshot) → Rule Compliance Score, "Compliance vs Performa" insight, discipline score — [docs/plan-rule-checklist-and-backtest-live.md](./docs/plan-rule-checklist-and-backtest-live.md) | ✅ |
 
 **Track B (butuh kredensial user):** flip ke Supabase + Auth/RLS, screenshot →
 Storage, deploy Edge Function `ai-daily`, provider data IDX. Lihat

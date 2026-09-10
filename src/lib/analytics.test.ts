@@ -5,6 +5,7 @@ import {
   bySetupTag,
   byMarketCondition,
   byReason,
+  byRuleCompliance,
   reasonKeywords,
   streaks,
   drawdown,
@@ -120,6 +121,24 @@ describe('byReason', () => {
       R('cangkir lagi di H4', { entry_at: '2026-08-03T08:00:00Z', exit: 90 }),
     ]
     expect(byReason(j).some((r) => r.key === '“cangkir”')).toBe(true)
+  })
+})
+
+describe('byRuleCompliance', () => {
+  const rc = (n: number, total = 4) =>
+    Array.from({ length: total }, (_, i) => ({ rule: `r${i}`, checked: i < n }))
+
+  it('buckets closed trades by compliance %, stable order, skips no-rule trades', () => {
+    const j = [
+      win({ entry_at: '2026-08-01T08:00:00Z', rule_checks: rc(4) }), // 100%
+      loss({ entry_at: '2026-08-02T08:00:00Z', rule_checks: rc(2) }), // 50%
+      win({ entry_at: '2026-08-03T08:00:00Z', rule_checks: rc(2) }), // 50%
+      loss({ entry_at: '2026-08-04T08:00:00Z', rule_checks: [] }), // no rules -> excluded
+    ]
+    const rows = byRuleCompliance(j)
+    expect(rows.map((r) => r.key)).toEqual(['100%', '50–79%'])
+    expect(rows.find((r) => r.key === '100%')!.winRate).toBe(1)
+    expect(rows.find((r) => r.key === '50–79%')!.trades).toBe(2)
   })
 })
 

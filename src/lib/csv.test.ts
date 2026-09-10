@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseJournalCsv } from './csv'
+import { parseJournalCsv, encodeRuleChecks, decodeRuleChecks } from './csv'
 import type { Strategy } from '../types'
 
 const strat: Strategy = {
@@ -8,8 +8,27 @@ const strat: Strategy = {
   description: '',
   target_sample_size: 20,
   status: 'testing',
+  entry_rules: [],
   created_at: '2026-01-01T00:00:00Z',
 }
+
+describe('rule_checks kv codec', () => {
+  it('round-trips and strips reserved separators from rule text', () => {
+    const rc = [
+      { rule: 'Break H4; strong', checked: true },
+      { rule: 'Volume | naik', checked: false },
+    ]
+    const back = decodeRuleChecks(encodeRuleChecks(rc))
+    expect(back).toHaveLength(2)
+    expect(back[0].checked).toBe(true)
+    expect(back[1].checked).toBe(false)
+    expect(back[0].rule).toBe('Break H4  strong')
+    expect(back[1].rule.replace(/\s+/g, ' ')).toBe('Volume naik')
+  })
+  it('empty string decodes to []', () => {
+    expect(decodeRuleChecks('')).toEqual([])
+  })
+})
 
 describe('parseJournalCsv', () => {
   it('parses the export header + resolves strategy by name', () => {

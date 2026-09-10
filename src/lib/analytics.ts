@@ -6,7 +6,7 @@
 // deterministic across machines. `sessionOf` (types.ts) is UTC-anchored too.
 import type { JournalEntry, TradingSession } from '../types'
 import { TRADING_SESSIONS, sessionOf } from '../types'
-import { round } from './finance'
+import { round, ruleCompliance } from './finance'
 import { toIDR } from './fx'
 
 const pnlBase = (e: JournalEntry) => toIDR(e.realized_pnl, e.size_currency)
@@ -191,6 +191,17 @@ export function byReason(entries: JournalEntry[], minTrades = 2): Bucket[] {
     .map(([k, list]) => bucket(k, list))
     .filter((b) => b.trades >= minTrades)
     .sort((a, b) => b.expectancy - a.expectancy || b.trades - a.trades)
+}
+
+/** Win rate / expectancy grouped by entry-rule compliance bucket (PRD §8). */
+export function byRuleCompliance(entries: JournalEntry[]): Bucket[] {
+  const label = (c: number) =>
+    c >= 1 ? '100%' : c >= 0.8 ? '80–99%' : c >= 0.5 ? '50–79%' : '<50%'
+  const order = ['100%', '80–99%', '50–79%', '<50%']
+  return groupBy(entries, (e) => {
+    const c = ruleCompliance(e)
+    return c == null ? null : label(c)
+  }).sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key))
 }
 
 // ---------- streaks ----------

@@ -20,10 +20,14 @@ export function sheetsTarget(): string {
 function normalize(raw: unknown): DB {
   const o = (raw ?? {}) as Partial<DB>
   return {
-    strategies: Array.isArray(o.strategies) ? o.strategies : [],
+    strategies: (Array.isArray(o.strategies) ? o.strategies : []).map((s) => ({
+      ...s,
+      entry_rules: s.entry_rules ?? [],
+    })),
     journal: (Array.isArray(o.journal) ? o.journal : []).map((t) => ({
       ...t,
       mode: t.mode === 'backtest' ? 'backtest' : 'live',
+      rule_checks: t.rule_checks ?? [],
       setup_tags: t.setup_tags ?? [],
       mistakes: t.mistakes ?? [],
       entry_at: t.entry_at ?? t.created_at,

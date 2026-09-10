@@ -1,14 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AssetType,
   Currency,
   JournalEntry,
   MarketCondition,
   Psychology,
+  RuleCheck,
   Strategy,
 } from '../../types'
 import { MARKET_CONDITIONS, MISTAKE_TAGS, PSYCHOLOGY, SETUP_TAGS } from '../../types'
-import { direction, plannedRR, slOnLossSide } from '../../lib/finance'
+import { direction, plannedRR, reconcileRuleChecks, slOnLossSide } from '../../lib/finance'
 import { rr } from '../../lib/format'
 import { putScreenshot } from '../../lib/storage'
 import { CRYPTO_PAIRS, loadCryptoPairs } from '../../lib/pairs'
@@ -46,6 +47,7 @@ export interface TradeDraft {
   risk_pct: number | null
   screenshot_ref: string | null
   mistakes: string[]
+  rule_checks: RuleCheck[]
   /** edit mode only, for a closed trade whose exit was mis-typed */
   exit_price?: number
 }
@@ -99,6 +101,22 @@ export function JournalForm({
   const [shotErr, setShotErr] = useState<string | null>(null)
   const editingClosed = edit && initial?.status === 'closed'
   const [exitPrice, setExitPrice] = useState<number | ''>(initial?.exit_price ?? '')
+
+  const rulesOf = (id: string) => strategies.find((s) => s.id === id)?.entry_rules ?? []
+  const [ruleChecks, setRuleChecks] = useState<RuleCheck[]>(() =>
+    initial
+      ? reconcileRuleChecks(initial.rule_checks, rulesOf(initial.strategy_id ?? ''))
+      : rulesOf(strategies[0]?.id ?? '').map((r) => ({ rule: r, checked: false })),
+  )
+  const lastStratId = useRef(strategyId)
+  useEffect(() => {
+    if (lastStratId.current === strategyId) return
+    lastStratId.current = strategyId
+    const rules = strategies.find((s) => s.id === strategyId)?.entry_rules ?? []
+    setRuleChecks((cur) => reconcileRuleChecks(cur, rules))
+  }, [strategyId, strategies])
+  const compliance =
+    ruleChecks.length > 0 ? ruleChecks.filter((r) => r.checked).length / ruleChecks.length : null
 
   const [cryptoPairs, setCryptoPairs] = useState<string[]>(CRYPTO_PAIRS)
   useEffect(() => {
@@ -175,6 +193,7 @@ export function JournalForm({
           risk_pct: riskPct === '' ? null : Number(riskPct),
           screenshot_ref: shot,
           mistakes,
+          rule_checks: ruleChecks,
           ...(editingClosed && exitPrice !== '' ? { exit_price: Number(exitPrice) } : {}),
         })
       }}
@@ -318,11 +337,63 @@ export function JournalForm({
         <TagPicker value={setupTags} onChange={setSetupTags} suggestions={SETUP_TAGS} />
       </FormRow>
 
+      {ruleChecks.length > 0 && (
+        <FormRow
+          label="Checklist aturan entry"
+          hint="Centang aturan strategi yang benar-benar terpenuhi saat entry — jadi Rule Compliance Score."
+        >
+          <div className="space-y-1.5 rounded-lg border border-border-soft bg-surface-2/40 p-3">
+            <div className="mb-1 flex items-center justify-between">
+              <span
+                className={`text-xs font-semibold ${
+                  compliance === 1 ? 'text-win' : compliance != null && compliance >= 0.5 ? 'text-warn' : 'text-lose'
+                }`}
+              >
+                Compliance {ruleChecks.filter((r) => r.checked).length}/{ruleChecks.length}
+                {compliance != null && ` (${Math.round(compliance * 100)}%)`}
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost px-2 py-1 text-[11px]"
+                onClick={() => setRuleChecks((cur) => cur.map((r) => ({ ...r, checked: true })))}
+              >
+                Centang semua
+              </button>
+            </div>
+            {ruleChecks.map((rc) => (
+              <label key={rc.rule} className="flex cursor-pointer items-start gap-2 text-[13px] text-ink-soft">
+                <input
+                  type="checkbox"
+                  checked={rc.checked}
+                  onChange={() =>
+                    setRuleChecks((cur) =>
+                      cur.map((x) => (x.rule === rc.rule ? { ...x, checked: !x.checked } : x)),
+                    )
+                  }
+                  className="mt-0.5 accent-[var(--color-brand)]"
+                />
+                <span className={rc.checked ? 'text-ink' : ''}>{rc.rule}</span>
+              </label>
+            ))}
+          </div>
+        </FormRow>
+      )}
+
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border-soft bg-surface-2/50 px-3 py-2.5 text-xs">
         <span className="text-ink-mute">Kalkulasi otomatis:</span>
         <Badge tone="info">Planned R:R {rr(prr)}</Badge>
         {dir && <Badge tone={dir === 'long' ? 'brand' : 'lose'}>{dir === 'long' ? 'Long' : 'Short'}</Badge>}
         {prr != null && prr < 1.5 && <Badge tone="warn">R:R rendah — pertimbangkan skip</Badge>}
+        {compliance != null && (
+          <Badge tone={compliance === 1 ? 'brand' : compliance >= 0.5 ? 'warn' : 'lose'}>
+            Compliance {Math.round(compliance * 100)}%
+          </Badge>
+        )}
+        {compliance != null && compliance < 1 && followed && (
+          <Badge tone="warn">
+            “Sesuai rencana” tapi {ruleChecks.filter((r) => !r.checked).length} aturan tak tercentang
+          </Badge>
+        )}
         {!slSideOk && dir && (
           <Badge tone="lose">
             SL di sisi yang salah — untuk {dir === 'long' ? 'long, SL harus < entry' : 'short, SL harus > entry'}

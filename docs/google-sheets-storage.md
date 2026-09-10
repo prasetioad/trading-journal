@@ -78,10 +78,13 @@ Kolom penting di tab `journal` untuk analisa pola:
 `entry_at, mode, pair, strategy_id, setup_tags, market_condition, psychology,
 followed_plan, risk_pct, confidence, reasoning, realized_pnl, realized_rr, mistakes`.
 
-`mode` = `live` (default) atau `backtest` (dari Backtest Lab — hanya mempengaruhi
-Strategy League Table). Tiap kali `Code.gs` berubah (mis. kolom `mode` atau fitur
-quote ditambah), **wajib re-deploy** Web App-nya (Deploy ▸ Manage deployments ▸
-New version).
+`mode` = `live` (default) atau `backtest`. `rule_checks` = kepatuhan checklist
+aturan entry per trade, disimpan sebagai `"aturan::1 ; aturan lain::0"`.
+Tab `strategies` punya kolom `entry_rules` (`a | b | c`).
+
+Tiap kali `Code.gs` berubah (kolom baru `mode` / `rule_checks` / `entry_rules`,
+fitur quote), **wajib re-deploy** Web App-nya (Deploy ▸ Manage deployments ▸
+edit ▸ Version: New version).
 
 ---
 

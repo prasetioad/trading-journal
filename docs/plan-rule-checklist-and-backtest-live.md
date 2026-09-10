@@ -1,6 +1,6 @@
 # Rencana Pengembangan — Backtest Lab Live Price + Strategy Entry-Rule Checklist
 
-Status: **draft, belum dikerjakan** · Dibuat 2026-09-10 · Sumber kebutuhan: user
+Status: **SELESAI** (A–D) · Dibuat & dikerjakan 2026-09-10 · Sumber kebutuhan: user
 Traceability: PRD §4.4C (Discipline Score), PRD §8 (Rule Compliance Score),
 [roadmapv2.md](../roadmapv2.md) A14 (Backtest Lab), A2 (rule engine).
 
@@ -181,13 +181,17 @@ checked vs unchecked. Tunda sampai data cukup.
 ## 4. Fase pengerjaan & urutan
 
 ```
-A ─ Live price Backtest Lab      (mandiri, ship dulu)      0.5 hari
-B ─ Data model entry_rules + rule_checks + helper + tes    1.0 hari
-C ─ Checklist di JournalForm (create + edit merge)         1.0 hari
+A ─ Live price Backtest Lab                                ✅ commit feat(backtest)
+B ─ Data model entry_rules + rule_checks + helper + tes    ✅
+C ─ Checklist di JournalForm + StrategyForm rules editor   ✅
 D ─ Compliance: chip baris, byRuleCompliance, autoInsights,
-    disciplineScore, widget Insights                       1.0–1.5 hari
+    disciplineScore, widget Insights                       ✅
 E ─ Per-rule impact analysis                               ditunda (butuh data)
 ```
+
+Hasil seed demo: `byRuleCompliance` → compliance 100% (n=17, WR 71%, +Rp 454k/trade)
+vs <50% (n=7, WR 0%, −Rp 359k). `autoInsights` memunculkan insight
+"Eksekusi: kepatuhan aturan menentukan hasil" di posisi teratas.
 
 Total inti (A–D): **~3.5–4 hari**.
 

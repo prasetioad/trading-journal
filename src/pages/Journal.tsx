@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import type { JournalEntry } from '../types'
 import { DESTRUCTIVE_EMOTIONS, sessionOf } from '../types'
-import { plannedRR } from '../lib/finance'
+import { plannedRR, ruleCompliance } from '../lib/finance'
 import { toIDR } from '../lib/fx'
 import { behaviorFlags, disciplineByTrade, type FlagKind } from '../lib/rules'
 import { dateShort, money, num, pct, rr } from '../lib/format'
@@ -445,6 +445,7 @@ function Row({
   onShot: () => void
 }) {
   const prr = plannedRR(t.entry_price, t.take_profit, t.stop_loss)
+  const comp = ruleCompliance(t)
   const leak = DESTRUCTIVE_EMOTIONS.includes(t.psychology)
   const uPnl = price != null ? unrealized(t, price) : null
   const discTone =
@@ -494,11 +495,18 @@ function Row({
 
       <Td>
         <div className="flex flex-col gap-1">
-          {t.followed_plan ? (
-            <Badge tone="brand">SOP</Badge>
-          ) : (
-            <Badge tone="lose">Langgar SOP</Badge>
-          )}
+          <div className="flex flex-wrap items-center gap-1">
+            {t.followed_plan ? (
+              <Badge tone="brand">SOP</Badge>
+            ) : (
+              <Badge tone="lose">Langgar SOP</Badge>
+            )}
+            {comp != null && (
+              <Badge tone={comp === 1 ? 'brand' : comp >= 0.5 ? 'warn' : 'lose'}>
+                {t.rule_checks.filter((r) => r.checked).length}/{t.rule_checks.length} aturan
+              </Badge>
+            )}
+          </div>
           <span className={`text-[11px] ${leak ? 'text-lose' : 'text-ink-soft'}`}>{t.psychology}</span>
           {t.mistakes.length > 0 && (
             <span className="text-[10px] text-lose/80">{t.mistakes.join(', ')}</span>

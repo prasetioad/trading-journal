@@ -4,6 +4,7 @@ import {
   byHour,
   byMarketCondition,
   byReason,
+  byRuleCompliance,
   bySession,
   bySetupTag,
   byWeekday,
@@ -30,6 +31,7 @@ export default function Insights() {
       setup: bySetupTag(journal),
       market: byMarketCondition(journal),
       reason: byReason(journal),
+      compliance: byRuleCompliance(journal),
       dna: tradingDNA(journal),
     }),
     [journal, strategies],
@@ -81,6 +83,18 @@ export default function Insights() {
       <Card>
         <SectionTitle title="Performa per setup" hint="Satu trade bisa masuk beberapa tag." />
         <BucketTable rows={d.setup} label="Setup" emptyHint="Tambahkan setup tag pada trade." />
+      </Card>
+
+      <Card>
+        <SectionTitle
+          title="Rule Compliance vs Performa"
+          hint="Kepatuhan checklist aturan entry strategi (PRD §8) — mengukur kualitas eksekusi, bukan kualitas strategi."
+        />
+        <BucketTable
+          rows={d.compliance}
+          label="Compliance"
+          emptyHint="Definisikan aturan entry di Strategy Playbook, lalu isi checklist saat input trade."
+        />
       </Card>
 
       <Card>

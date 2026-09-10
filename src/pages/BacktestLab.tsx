@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { useStore } from '../store/store'
 import type { JournalEntry } from '../types'
-import { plannedRR, strategyStats } from '../lib/finance'
+import { plannedRR, ruleCompliance, strategyStats } from '../lib/finance'
 import { toIDR } from '../lib/fx'
 import { dateShort, money, num, pct, rr } from '../lib/format'
 import { unrealized } from '../lib/verify'
@@ -244,7 +244,21 @@ export default function BacktestLab() {
                       </td>
                       <td className="px-3 py-2.5 align-top text-ink-soft">{stratName(t.strategy_id)}</td>
                       <td className="px-3 py-2.5 align-top">
-                        {t.followed_plan ? <Badge tone="brand">Sesuai</Badge> : <Badge tone="lose">Melanggar</Badge>}
+                        <div className="flex flex-wrap items-center gap-1">
+                          {t.followed_plan ? (
+                            <Badge tone="brand">Sesuai</Badge>
+                          ) : (
+                            <Badge tone="lose">Melanggar</Badge>
+                          )}
+                          {(() => {
+                            const c = ruleCompliance(t)
+                            return c != null ? (
+                              <Badge tone={c === 1 ? 'brand' : c >= 0.5 ? 'warn' : 'lose'}>
+                                {t.rule_checks.filter((r) => r.checked).length}/{t.rule_checks.length}
+                              </Badge>
+                            ) : null
+                          })()}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 align-top text-right tnum text-ink-soft">{rr(prr)}</td>
                       <td className="px-3 py-2.5 align-top text-right tnum text-ink-soft">{rr(t.realized_rr)}</td>

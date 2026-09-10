@@ -7,7 +7,7 @@
 // Pure; no framework imports.
 import type { JournalEntry, Strategy } from '../types'
 import { DESTRUCTIVE_EMOTIONS } from '../types'
-import { plannedRR, round } from './finance'
+import { plannedRR, round, ruleCompliance } from './finance'
 import { toIDR } from './fx'
 import { bySetupTag, bySession, byHour, byReason } from './analytics'
 
@@ -186,7 +186,16 @@ export function disciplineScore(
 ): TradeDiscipline {
   let score = 100
   const reasons: string[] = []
-  if (!t.followed_plan) {
+  // Rule compliance is the primary execution signal when the strategy defines
+  // rules; otherwise fall back to the coarse followed_plan toggle.
+  const comp = ruleCompliance(t)
+  if (comp != null) {
+    const pen = Math.round((1 - comp) * 40)
+    if (pen > 0) {
+      score -= pen
+      reasons.push(`Rule compliance ${Math.round(comp * 100)}% (−${pen})`)
+    }
+  } else if (!t.followed_plan) {
     score -= 30
     reasons.push('Melanggar SOP (−30)')
   }
@@ -278,6 +287,35 @@ export function autoInsights(entries: JournalEntry[], _strategies: Strategy[] = 
       detail: `Saat catatanmu menyebut ${worstReason.key}: win rate ${(worstReason.winRate * 100).toFixed(0)}% · expectancy ${fmtIDR(worstReason.expectancy)}/trade (${worstReason.trades} trade). Pertimbangkan skip bila alasan entry hanya ini.`,
       magnitude: Math.abs(worstReason.netPnl) * 0.9,
     })
+  }
+
+  // discipline — rule compliance vs performance (PRD §8, "killer feature")
+  const withRules = closed.filter((e) => e.rule_checks && e.rule_checks.length > 0)
+  if (withRules.length >= 4) {
+    const hi = withRules.filter((e) => (ruleCompliance(e) ?? 0) >= 0.8)
+    const lo = withRules.filter((e) => (ruleCompliance(e) ?? 0) < 0.8)
+    if (hi.length >= 2 && lo.length >= 2) {
+      const expOf = (list: JournalEntry[]) => {
+        const w = list.filter((e) => pnlBase(e) > 0)
+        const l = list.filter((e) => pnlBase(e) < 0)
+        const aw = w.length ? w.reduce((s, e) => s + pnlBase(e), 0) / w.length : 0
+        const al = l.length ? Math.abs(l.reduce((s, e) => s + pnlBase(e), 0)) / l.length : 0
+        return {
+          exp: (w.length / list.length) * aw - (l.length / list.length) * al,
+          wr: w.length / list.length,
+        }
+      }
+      const a = expOf(hi)
+      const b = expOf(lo)
+      if (a.exp > b.exp) {
+        out.push({
+          kind: 'behavioral',
+          title: 'Eksekusi: kepatuhan aturan menentukan hasil',
+          detail: `Compliance ≥80%: WR ${(a.wr * 100).toFixed(0)}%, expectancy ${fmtIDR(a.exp)}/trade (${hi.length} trade). Compliance <80%: WR ${(b.wr * 100).toFixed(0)}%, ${fmtIDR(b.exp)}/trade (${lo.length} trade). Perbaiki eksekusi sebelum menilai strateginya.`,
+          magnitude: Math.abs(a.exp - b.exp) * withRules.length,
+        })
+      }
+    }
   }
 
   // behavioral — revenge propensity

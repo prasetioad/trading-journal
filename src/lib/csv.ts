@@ -6,12 +6,31 @@ import type {
   JournalEntry,
   MarketCondition,
   Psychology,
+  RuleCheck,
   Strategy,
   TradeMode,
 } from '../types'
 import type { Analysis } from '../types'
 import { MARKET_CONDITIONS, PSYCHOLOGY } from '../types'
 import { plannedRR } from './finance'
+
+/** encode/decode rule_checks as "rule::1 ; rule2::0" (matches google-apps-script kv) */
+export function encodeRuleChecks(rc: RuleCheck[]): string {
+  return (rc ?? [])
+    .map((r) => `${String(r.rule).replace(/[;|]/g, ' ')}::${r.checked ? 1 : 0}`)
+    .join(' ; ')
+}
+export function decodeRuleChecks(s: string): RuleCheck[] {
+  if (!s.trim()) return []
+  return s
+    .split(';')
+    .map((part) => {
+      const i = part.lastIndexOf('::')
+      if (i < 0) return null
+      return { rule: part.slice(0, i).trim(), checked: part.slice(i + 2).trim() === '1' }
+    })
+    .filter((x): x is RuleCheck => !!x && !!x.rule)
+}
 
 function toCsv(headers: string[], rows: (string | number | null | undefined)[][]): string {
   const esc = (v: string | number | null | undefined) => {
@@ -64,6 +83,7 @@ export function exportJournalCsv(
       'outcome',
       'psychology',
       'reasoning',
+      'rule_checks',
       'closed_at',
     ],
     journal.map((t) => [
@@ -88,6 +108,7 @@ export function exportJournalCsv(
       t.outcome ?? '',
       t.psychology,
       t.reasoning,
+      encodeRuleChecks(t.rule_checks),
       t.closed_at ?? '',
     ]),
   )
@@ -122,6 +143,7 @@ export interface ImportedTrade {
   screenshot_ref: null
   mistakes: string[]
   mode: TradeMode
+  rule_checks: RuleCheck[]
 }
 
 export interface ParseResult {
@@ -230,6 +252,7 @@ export function parseJournalCsv(
       screenshot_ref: null,
       mistakes: [],
       mode: get('mode') === 'backtest' ? 'backtest' : defaultMode,
+      rule_checks: decodeRuleChecks(get('rule_checks')),
     })
   }
   return { rows, errors }

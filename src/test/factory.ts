@@ -1,5 +1,5 @@
 // Test factory for JournalEntry — only what the pure logic modules read.
-import type { JournalEntry } from '../types'
+import type { JournalEntry, RuleCheck } from '../types'
 import { direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
 
 let n = 0
@@ -16,6 +16,7 @@ export interface TradeSpec {
   sl?: number
   psychology?: JournalEntry['psychology']
   reasoning?: string
+  rule_checks?: RuleCheck[]
   setup_tags?: string[]
   market_condition?: JournalEntry['market_condition']
   confidence?: number | null
@@ -49,6 +50,8 @@ export function trade(spec: TradeSpec): JournalEntry {
     realized_rr: null,
     status: 'open',
     outcome: null,
+    mode: 'live',
+    rule_checks: spec.rule_checks ?? [],
     psychology: spec.psychology ?? 'Netral',
     reasoning: spec.reasoning ?? 'test',
     analyzed_by_ai: false,

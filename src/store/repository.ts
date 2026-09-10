@@ -16,12 +16,13 @@ interface DB {
 /** Backfill fields added after a DB was first written (Roadmap V2 A0). */
 function migrate(db: Partial<DB>): DB {
   return {
-    strategies: db.strategies ?? [],
+    strategies: (db.strategies ?? []).map((s) => ({ ...s, entry_rules: s.entry_rules ?? [] })),
     analyses: db.analyses ?? [],
     plans: db.plans ?? [],
     journal: (db.journal ?? []).map((t) => ({
       ...t,
       mode: t.mode ?? 'live',
+      rule_checks: t.rule_checks ?? [],
       entry_at: t.entry_at ?? t.created_at,
       planned_entry: t.planned_entry ?? null,
       setup_tags: t.setup_tags ?? [],

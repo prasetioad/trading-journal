@@ -1,5 +1,5 @@
 // Pure trading math — PRD §4.2 (R:R), §4.4 (Expectancy, Profit Factor, Discipline)
-import type { JournalEntry, Strategy } from '../types'
+import type { JournalEntry, RuleCheck, Strategy } from '../types'
 import { DESTRUCTIVE_EMOTIONS } from '../types'
 import { toIDR } from './fx'
 
@@ -56,6 +56,44 @@ export function outcomeOf(pnl: number): 'win' | 'lose' | 'breakeven' {
   if (pnl > 0) return 'win'
   if (pnl < 0) return 'lose'
   return 'breakeven'
+}
+
+// ---------- Strategy entry-rule checklist (PRD §8) ----------
+
+/** Strip separators reserved by the Google Sheets `kv` encoding. */
+export function sanitizeRule(s: string): string {
+  return s.replace(/[;|]/g, ' ').replace(/::/g, ':').replace(/\s+/g, ' ').trim()
+}
+
+/** Parse a textarea (one rule per line) into a clean, de-duped, ordered list. */
+export function parseRules(text: string): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const line of text.split('\n')) {
+    const r = sanitizeRule(line)
+    if (r && !seen.has(r.toLowerCase())) {
+      seen.add(r.toLowerCase())
+      out.push(r)
+    }
+  }
+  return out
+}
+
+/** checked / total, or null when the trade has no rule checklist. */
+export function ruleCompliance(t: JournalEntry): number | null {
+  if (!t.rule_checks || t.rule_checks.length === 0) return null
+  const checked = t.rule_checks.filter((r) => r.checked).length
+  return round(checked / t.rule_checks.length, 4)
+}
+
+/**
+ * Re-sync a trade's checklist against a strategy's current rules (used when a
+ * trade is edited or its strategy changes): keep the tick state for rules whose
+ * text is unchanged, add new rules unchecked, drop removed rules.
+ */
+export function reconcileRuleChecks(prev: RuleCheck[], currentRules: string[]): RuleCheck[] {
+  const wasChecked = new Map(prev.map((r) => [r.rule, r.checked]))
+  return currentRules.map((rule) => ({ rule, checked: wasChecked.get(rule) ?? false }))
 }
 
 /**

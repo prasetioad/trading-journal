@@ -7,6 +7,10 @@ import {
   slOnLossSide,
   outcomeOf,
   applyTradeEdit,
+  parseRules,
+  sanitizeRule,
+  ruleCompliance,
+  reconcileRuleChecks,
   strategyStats,
   disciplineSummary,
   leakSummary,
@@ -70,6 +74,47 @@ describe('trade mode separation (Backtest Lab)', () => {
 
     const liveOnly = strategyStats(S, 'X', 'testing', 20, mixed.filter((t) => t.mode !== 'backtest'))
     expect(liveOnly.closedCount).toBe(1)
+  })
+})
+
+describe('entry-rule checklist', () => {
+  it('parseRules: one per line, trimmed, de-duped, sanitized', () => {
+    expect(parseRules('  A rule \n\n B; rule :: 2 \n A rule ')).toEqual(['A rule', 'B rule : 2'])
+  })
+
+  it('sanitizeRule strips kv separators', () => {
+    expect(sanitizeRule('foo; bar | baz :: qux')).toBe('foo bar baz : qux')
+  })
+
+  it('ruleCompliance = checked / total, null when no rules', () => {
+    expect(
+      ruleCompliance(
+        trade({
+          entry_at: AT,
+          exit: 110,
+          rule_checks: [
+            { rule: 'a', checked: true },
+            { rule: 'b', checked: true },
+            { rule: 'c', checked: false },
+            { rule: 'd', checked: false },
+          ],
+        }),
+      ),
+    ).toBe(0.5)
+    expect(ruleCompliance(trade({ entry_at: AT }))).toBeNull()
+  })
+
+  it('reconcileRuleChecks keeps ticks for matching rule text on strategy/edit change', () => {
+    const prev = [
+      { rule: 'Break H4', checked: true },
+      { rule: 'Volume naik', checked: false },
+      { rule: 'Retest', checked: true },
+    ]
+    expect(reconcileRuleChecks(prev, ['Break H4', 'Retest', 'R:R 1:2'])).toEqual([
+      { rule: 'Break H4', checked: true },
+      { rule: 'Retest', checked: true },
+      { rule: 'R:R 1:2', checked: false },
+    ])
   })
 })
 
