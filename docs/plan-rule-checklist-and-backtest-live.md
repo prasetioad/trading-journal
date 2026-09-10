@@ -252,12 +252,14 @@ Target: seluruh suite hijau (saat ini 64 tes), + ~12–15 tes baru.
 
 ---
 
-## 8. Keputusan terbuka (perlu konfirmasi user)
+## 8. Keputusan (sudah dikonfirmasi user 2026-09-10)
 
-1. **Auto SL/TP untuk trade backtest**: aktif (forward paper trade) dengan guard
-   `entry_at` ≤ 3 hari? Atau matikan total untuk backtest?
-2. **`kv` vs JSON** untuk `rule_checks` di Google Sheet — `kv` lebih terbaca,
-   JSON lebih tahan karakter aneh. Rekomendasi: `kv` + sanitize.
-3. **`disciplineScore`**: ganti penalti `followed_plan` dengan compliance saat
-   aturan ada, atau jumlahkan keduanya? Rekomendasi: ganti (hindari double-count).
-4. Wajibkan minimal 1 aturan saat status strategi `active`? (nudge kualitas)
+1. **Auto SL/TP untuk trade backtest**: ✅ AKTIF dengan guard `entry_at` ≤ 3 hari.
+   Backtest historis lama = manual saja.
+2. **`disciplineScore`**: ✅ compliance **menggantikan** penalti `followed_plan`
+   saat strategi punya aturan (hindari double-count). `followed_plan` tetap ada
+   sebagai biner cepat + nudge konsistensi.
+3. **Strategi `active`**: ✅ WAJIB minimal 1 `entry_rule`. `StrategyForm` memblokir
+   ubah status → `active` bila `entry_rules` kosong.
+4. `rule_checks` di Google Sheet: cell type **`kv`** + sanitize teks aturan
+   (buang `;` dan `::`). (keputusan implementasi, tidak perlu konfirmasi)

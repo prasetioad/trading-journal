@@ -3,7 +3,9 @@ import { useStore } from '../store/store'
 import type { JournalEntry } from '../types'
 import { plannedRR, strategyStats } from '../lib/finance'
 import { toIDR } from '../lib/fx'
-import { dateShort, money, pct, rr } from '../lib/format'
+import { dateShort, money, num, pct, rr } from '../lib/format'
+import { unrealized } from '../lib/verify'
+import { usePrices } from '../store/prices'
 import { exportJournalCsv, parseJournalCsv, type ImportedTrade } from '../lib/csv'
 import { runSearch } from '../lib/search'
 import { Badge, Card, EmptyState, SectionTitle, StatTile } from '../components/ui/primitives'
@@ -24,6 +26,7 @@ export default function BacktestLab() {
     reopenTrade,
     deleteTrade,
   } = useStore()
+  const { prices } = usePrices()
   const fileRef = useRef<HTMLInputElement>(null)
   const [importPreview, setImportPreview] = useState<{ rows: ImportedTrade[]; errors: string[] } | null>(null)
   const [creating, setCreating] = useState(false)
@@ -59,6 +62,12 @@ export default function BacktestLab() {
     const lr = closed.length ? losses.length / closed.length : 0
     const aw = wins.length ? sw / wins.length : 0
     const al = losses.length ? sl / losses.length : 0
+    const unrl = rows
+      .filter((t) => t.status === 'open')
+      .reduce((s, t) => {
+        const p = prices[t.pair]
+        return p != null ? s + toIDR(unrealized(t, p), t.size_currency) : s
+      }, 0)
     return {
       total: rows.length,
       open: rows.filter((t) => t.status === 'open').length,
@@ -66,8 +75,9 @@ export default function BacktestLab() {
       winRate: wr,
       expectancy: wr * aw - lr * al,
       net: sw - sl,
+      unrl,
     }
-  }, [rows])
+  }, [rows, prices])
 
   const perStrategy = useMemo(
     () =>
@@ -136,7 +146,7 @@ export default function BacktestLab() {
         )}
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="Trade backtest" value={String(summary.total)} delta={`${summary.open} open`} />
         <StatTile label="Closed" value={String(summary.closed)} />
         <StatTile label="Win Rate" value={pct(summary.winRate)} />
@@ -149,6 +159,11 @@ export default function BacktestLab() {
           label="Net (simulasi)"
           value={money(summary.net, 'IDR', { sign: true })}
           tone={summary.net >= 0 ? 'win' : 'lose'}
+        />
+        <StatTile
+          label="Unrealized (live)"
+          value={money(summary.unrl, 'IDR', { sign: true })}
+          tone={summary.unrl > 0 ? 'win' : summary.unrl < 0 ? 'lose' : 'neutral'}
         />
       </div>
 
@@ -207,6 +222,8 @@ export default function BacktestLab() {
               <tbody>
                 {rows.map((t) => {
                   const prr = plannedRR(t.entry_price, t.take_profit, t.stop_loss)
+                  const live = t.status === 'open' ? prices[t.pair] : undefined
+                  const uPnl = live != null ? unrealized(t, live) : null
                   return (
                     <tr key={t.id} className="border-b border-border-soft last:border-0 hover:bg-surface-2/40">
                       <td className="px-3 py-2.5 align-top whitespace-nowrap text-ink-soft">
@@ -218,6 +235,12 @@ export default function BacktestLab() {
                           {t.asset_type} · {t.direction}
                           {t.setup_tags.length > 0 && ` · ${t.setup_tags.join(', ')}`}
                         </div>
+                        {live != null && (
+                          <div className="mt-0.5 flex items-center gap-1 text-[11px]">
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand" />
+                            <span className="tnum text-brand">{num(live, 8)}</span>
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-2.5 align-top text-ink-soft">{stratName(t.strategy_id)}</td>
                       <td className="px-3 py-2.5 align-top">
@@ -229,6 +252,10 @@ export default function BacktestLab() {
                         {t.realized_pnl != null ? (
                           <span className={t.realized_pnl >= 0 ? 'text-win' : 'text-lose'}>
                             {money(t.realized_pnl, t.size_currency, { sign: true })}
+                          </span>
+                        ) : uPnl != null ? (
+                          <span className={uPnl >= 0 ? 'text-win/80' : 'text-lose/80'} title="Unrealized (live)">
+                            ~{money(uPnl, t.size_currency, { sign: true })}
                           </span>
                         ) : (
                           <span className="text-ink-mute">—</span>
