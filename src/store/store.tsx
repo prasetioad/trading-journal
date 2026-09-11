@@ -7,7 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import type { Analysis, JournalEntry, Strategy, TradeMode, TradingPlan } from '../types'
+import type {
+  Analysis,
+  JournalEntry,
+  RuleCheck,
+  Strategy,
+  TradeMode,
+  TradingPlan,
+} from '../types'
 import { repository, type DB } from './repository'
 import { uid } from '../lib/format'
 import { applyTradeEdit, direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
@@ -15,7 +22,10 @@ import { isEmpty, readAll, sheetsEnabled, writeAll } from '../lib/sheets'
 
 export type SyncStatus = 'off' | 'loading' | 'synced' | 'saving' | 'error'
 
-type StrategyInput = Pick<Strategy, 'name' | 'description' | 'target_sample_size' | 'status'>
+type StrategyInput = Pick<
+  Strategy,
+  'name' | 'description' | 'target_sample_size' | 'status' | 'entry_rules'
+>
 type JournalInput = Omit<
   JournalEntry,
   | 'id'
@@ -26,11 +36,12 @@ type JournalInput = Omit<
   | 'status'
   | 'outcome'
   | 'mode'
+  | 'rule_checks'
   | 'analyzed_by_ai'
   | 'analyzed_at'
   | 'closed_at'
   | 'created_at'
-> & { entry_at?: string; mode?: TradeMode }
+> & { entry_at?: string; mode?: TradeMode; rule_checks?: RuleCheck[] }
 type AnalysisInput = Omit<
   Analysis,
   'id' | 'status' | 'resolved_at' | 'analyzed_by_ai' | 'created_at'
@@ -167,6 +178,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       status: 'open',
       outcome: null,
       mode: t.mode ?? 'live',
+      rule_checks: t.rule_checks ?? [],
       analyzed_by_ai: false,
       analyzed_at: null,
       closed_at: null,

@@ -16,6 +16,29 @@ const S_BREAKOUT = 'seed-strat-breakout'
 const S_SND = 'seed-strat-snd'
 const S_EMA = 'seed-strat-ema'
 
+const STRAT_RULES: Record<string, string[]> = {
+  [S_BREAKOUT]: [
+    'Break level kunci dengan close H4',
+    'Volume ekspansi saat break',
+    'Retest bersih tanpa wick panjang',
+    'Planned R:R minimal 1:2',
+    'Bukan dalam 30 menit sekitar news besar',
+  ],
+  [S_SND]: [
+    'Zona supply/demand H4 belum ter-mitigasi',
+    'Ada rejection wick jelas di zona',
+    'Konfirmasi BOS di LTF',
+    'SL di luar zona, bukan di dalam',
+    'Planned R:R minimal 1:2',
+  ],
+  [S_EMA]: [
+    'Harga searah EMA200',
+    'Struktur HH-HL utuh',
+    'Entry pullback ke EMA20/50',
+    'SL di HL terakhir',
+  ],
+}
+
 function daysAgo(n: number, hour = 15, minute = 12) {
   const d = new Date()
   d.setDate(d.getDate() - n)
@@ -32,6 +55,7 @@ export function seedStrategies(): Strategy[] {
         'Entry saat harga break level kunci lalu retest sebagai support/resistance baru. Konfirmasi: volume naik + close di atas level. Exit: SL di bawah retest, TP di swing high berikutnya.',
       target_sample_size: 20,
       status: 'testing',
+      entry_rules: STRAT_RULES[S_BREAKOUT],
       created_at: daysAgo(40),
       updated_at: daysAgo(2),
     },
@@ -42,6 +66,7 @@ export function seedStrategies(): Strategy[] {
         'Entry di zona supply/demand H4 yang belum ter-mitigasi. Konfirmasi: rejection wick + BOS di LTF. SL di luar zona, TP di zona berlawanan terdekat.',
       target_sample_size: 20,
       status: 'testing',
+      entry_rules: STRAT_RULES[S_SND],
       created_at: daysAgo(35),
       updated_at: daysAgo(3),
     },
@@ -52,6 +77,7 @@ export function seedStrategies(): Strategy[] {
         'Hanya trade searah EMA200. Entry pullback ke EMA20/50 saat struktur HH-HL. SL di HL terakhir, TP trailing di bawah EMA20.',
       target_sample_size: 15,
       status: 'archived',
+      entry_rules: STRAT_RULES[S_EMA],
       created_at: daysAgo(90),
       updated_at: daysAgo(20),
     },
@@ -80,6 +106,7 @@ interface RawTrade {
   conf?: number
   risk?: number
   mistakes?: string[]
+  checks?: number // how many of the strategy's entry rules were ticked (from the top)
   why: string
   exit?: number // present => closed
   open?: boolean
@@ -121,6 +148,13 @@ function build(r: RawTrade): JournalEntry {
     risk_pct: r.risk ?? null,
     screenshot_ref: null,
     mistakes: r.mistakes ?? [],
+    rule_checks: (() => {
+      const rules = r.strat ? (STRAT_RULES[r.strat] ?? []) : []
+      if (rules.length === 0) return []
+      const emo = r.psych === 'Balas dendam' || r.psych === 'FOMO' || r.psych === 'Serakah'
+      const n = r.checks ?? (r.followed ? rules.length : emo ? 1 : Math.ceil(rules.length * 0.6))
+      return rules.map((rule, i) => ({ rule, checked: i < n }))
+    })(),
   }
   if (r.open || r.exit == null) return base
   const pnl = realizedPnl(base, r.exit)

@@ -24,14 +24,14 @@ var MAX_CELL = 45000;
 var SCHEMAS = {
   strategies: [
     ['id', 's'], ['name', 's'], ['description', 's'], ['target_sample_size', 'n'],
-    ['status', 's'], ['created_at', 's'], ['updated_at', 's'],
+    ['status', 's'], ['entry_rules', 'arr'], ['created_at', 's'], ['updated_at', 's'],
   ],
   journal: [
     ['id', 's'], ['asset_type', 's'], ['pair', 's'], ['strategy_id', 'sn'],
     ['followed_plan', 'b'], ['size_amount', 'n'], ['size_currency', 's'],
     ['entry_price', 'n'], ['take_profit', 'n'], ['stop_loss', 'n'], ['direction', 's'],
     ['exit_price', 'nn'], ['realized_pnl', 'nn'], ['realized_rr', 'nn'], ['status', 's'],
-    ['outcome', 'sn'], ['mode', 's'], ['psychology', 's'], ['reasoning', 's'], ['analyzed_by_ai', 'b'],
+    ['outcome', 'sn'], ['mode', 's'], ['rule_checks', 'kv'], ['psychology', 's'], ['reasoning', 's'], ['analyzed_by_ai', 'b'],
     ['analyzed_at', 'sn'], ['closed_at', 'sn'], ['created_at', 's'], ['entry_at', 's'],
     ['planned_entry', 'nn'], ['setup_tags', 'arr'], ['market_condition', 'sn'],
     ['confidence', 'nn'], ['risk_pct', 'nn'], ['screenshot_ref', 'sn'], ['mistakes', 'arr'],
@@ -169,6 +169,11 @@ function parseCell_(v, type) {
     case 'sn': return s === '' ? null : s;
     case 'arr': return s === '' ? [] : s.split('|').map(function (x) { return x.trim(); }).filter(String);
     case 'narr': return s === '' ? [] : s.split('|').map(function (x) { return Number(x.trim()); }).filter(function (n) { return !isNaN(n); });
+    case 'kv': return s === '' ? [] : s.split(';').map(function (part) {
+      var i = part.lastIndexOf('::');
+      if (i < 0) return null;
+      return { rule: part.slice(0, i).trim(), checked: part.slice(i + 2).trim() === '1' };
+    }).filter(function (x) { return x && x.rule; });
     default: return s;
   }
 }
@@ -176,6 +181,9 @@ function parseCell_(v, type) {
 function serializeCell_(v, type) {
   if (type === 'arr') return (v || []).join(' | ');
   if (type === 'narr') return (v || []).join(' | ');
+  if (type === 'kv') return (v || []).map(function (rc) {
+    return String(rc.rule).replace(/[;|]/g, ' ') + '::' + (rc.checked ? 1 : 0);
+  }).join(' ; ');
   if (type === 'b') return v === true;
   if (v === null || v === undefined) return '';
   var s = String(v);

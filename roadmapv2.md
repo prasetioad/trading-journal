@@ -128,6 +128,21 @@ untuk pair picker (A11).
 
 ---
 
+### A15 — Backtest Lab live price + Strategy entry-rule checklist  ✅
+Rencana: [docs/plan-rule-checklist-and-backtest-live.md](docs/plan-rule-checklist-and-backtest-live.md).
+- [x] Backtest Lab: harga live + unrealized P/L; auto SL/TP untuk backtest open
+  dengan guard `entry_at` ≤ 3 hari (forward paper trade).
+- [x] `Strategy.entry_rules: string[]` — editor textarea di Playbook; status `active`
+  wajib ≥ 1 aturan.
+- [x] `JournalEntry.rule_checks: {rule,checked}[]` — snapshot teks aturan saat entry.
+- [x] JournalForm: checklist + badge Compliance + nudge inkonsistensi vs `followed_plan`.
+- [x] `finance.ts`: `ruleCompliance`, `reconcileRuleChecks`, `parseRules`, `sanitizeRule`.
+- [x] `analytics.byRuleCompliance`; `rules.disciplineScore` (compliance menggantikan
+  penalti `followed_plan`); `autoInsights` insight "Eksekusi: kepatuhan aturan menentukan hasil".
+- [x] Chip kepatuhan di baris Journal & Backtest Lab; widget "Rule Compliance vs Performa" di Insights.
+- [x] Persist: localStorage native · Supabase `0004_strategy_rules.sql` (`entry_rules text[]`,
+  `rule_checks jsonb`) · Sheets `Code.gs` (`entry_rules` arr + `rule_checks` kv cell type — re-deploy Web App).
+
 ### A14 — Backtest Lab  ✅
 - [x] Field `mode: 'live' | 'backtest'` di `JournalEntry` (migrasi backfill `live`).
 - [x] Store: `journal` = live-only, `backtestJournal`, `allJournal`.

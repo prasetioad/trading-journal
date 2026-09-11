@@ -21,6 +21,7 @@ const toStrategy = (r: Record<string, unknown>): Strategy => ({
   description: (r.description as string) ?? '',
   target_sample_size: (r.target_sample_size as number) ?? 20,
   status: r.status as Strategy['status'],
+  entry_rules: (r.entry_rules as string[]) ?? [],
   created_at: r.created_at as string,
   updated_at: r.updated_at as string,
 })
@@ -43,6 +44,7 @@ const toJournal = (r: Record<string, unknown>): JournalEntry => ({
   status: r.status as JournalEntry['status'],
   outcome: (r.outcome as JournalEntry['outcome']) ?? null,
   mode: (r.mode as JournalEntry['mode']) ?? 'live',
+  rule_checks: (r.rule_checks as JournalEntry['rule_checks']) ?? [],
   psychology: r.psychology as JournalEntry['psychology'],
   reasoning: r.reasoning as string,
   analyzed_by_ai: (r.analyzed_by_ai as boolean) ?? false,
@@ -115,7 +117,7 @@ export async function fetchAll() {
 
 export async function insertStrategy(
   userId: string,
-  s: Pick<Strategy, 'name' | 'description' | 'target_sample_size' | 'status'>,
+  s: Pick<Strategy, 'name' | 'description' | 'target_sample_size' | 'status' | 'entry_rules'>,
 ) {
   const { data, error } = await db()
     .from('user_strategies')
@@ -155,6 +157,7 @@ export async function insertTrade(userId: string, t: Partial<JournalEntry>) {
       psychology: t.psychology,
       reasoning: t.reasoning,
       mode: t.mode ?? 'live',
+      rule_checks: t.rule_checks ?? [],
       entry_at: t.entry_at,
       planned_entry: t.planned_entry,
       setup_tags: t.setup_tags ?? [],

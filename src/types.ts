@@ -13,8 +13,16 @@ export interface Strategy {
   description: string
   target_sample_size: number
   status: StrategyStatus
+  /** Ordered entry rules — shown as a checklist on the trade form (PRD §8). */
+  entry_rules: string[]
   created_at: string
   updated_at: string
+}
+
+/** Per-trade snapshot of a strategy's entry rules + which were met at entry. */
+export interface RuleCheck {
+  rule: string
+  checked: boolean
 }
 
 // PRD §4.2 — fixed psychology list
@@ -116,6 +124,8 @@ export interface JournalEntry {
   outcome: TradeOutcome | null
   /** live journal vs Backtest Lab — see TradeMode */
   mode: TradeMode
+  /** snapshot of the strategy's entry_rules at entry time + tick state */
+  rule_checks: RuleCheck[]
   psychology: Psychology
   reasoning: string
   analyzed_by_ai: boolean

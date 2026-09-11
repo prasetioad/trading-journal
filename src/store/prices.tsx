@@ -19,8 +19,19 @@ import { fetchStockQuotes, type StockQuote } from '../lib/stocks'
 import { dateTime } from '../lib/format'
 import { emitToast } from '../components/ui/Toast'
 import { useStore } from './store'
+import type { JournalEntry } from '../types'
 
 export type StockSyncState = 'off' | 'polling' | 'ok' | 'error'
+
+// Backtest trades are forward paper trades — verify them only within a short
+// window of entry_at, so a historical setup entered "manually today" isn't
+// auto-closed against an unrelated current price.
+const BACKTEST_VERIFY_WINDOW_MS = 3 * 86_400_000
+function verifiable(t: JournalEntry): boolean {
+  if (t.mode !== 'backtest') return true
+  return Date.now() - new Date(t.entry_at).getTime() <= BACKTEST_VERIFY_WINDOW_MS
+}
+const btPrefix = (t: JournalEntry) => (t.mode === 'backtest' ? '(backtest) ' : '')
 
 interface PricesValue {
   prices: Record<string, number>
@@ -37,7 +48,8 @@ const AV_KEY = 'tj.autoVerify'
 const STOCK_POLL_MS = 60_000
 
 export function PricesProvider({ children }: { children: ReactNode }) {
-  const { journal, analyses, closeTrade, resolveAnalysis } = useStore()
+  // allJournal: open backtest trades get a live price + unrealized P/L too
+  const { allJournal: journal, analyses, closeTrade, resolveAnalysis } = useStore()
   const [prices, setPrices] = useState<Record<string, number>>({})
   const [state, setState] = useState<ConnState>('idle')
   const [lastUpdate, setLastUpdate] = useState<number | null>(null)
@@ -165,7 +177,7 @@ function runVerify(
   if (!s.autoVerify) return
 
   for (const t of s.journal) {
-    if (t.pair !== pair || t.status !== 'open') continue
+    if (t.pair !== pair || t.status !== 'open' || !verifiable(t)) continue
     const hit = checkTrade(t, price)
     if (!hit || acted.has(t.id)) continue
     acted.add(t.id)
@@ -173,7 +185,7 @@ function runVerify(
     setTimeout(() => acted.delete(t.id), 5000)
     emitToast({
       tone: hit.reason === 'tp' ? 'win' : 'lose',
-      title: `${t.pair} menyentuh ${hit.reason === 'tp' ? 'Take Profit' : 'Stop Loss'}`,
+      title: `${btPrefix(t)}${t.pair} menyentuh ${hit.reason === 'tp' ? 'Take Profit' : 'Stop Loss'}`,
       body: `Ditutup otomatis @ ${hit.exitPrice}`,
     })
   }
@@ -211,7 +223,7 @@ function runStockVerify(
   const bySym = new Map(quotes.map((q) => [q.symbol, q]))
 
   for (const t of s.journal) {
-    if (t.status !== 'open' || t.asset_type !== 'stock') continue
+    if (t.status !== 'open' || t.asset_type !== 'stock' || !verifiable(t)) continue
     const q = bySym.get(t.pair.toUpperCase())
     if (!q || acted.has(t.id)) continue
     const hit = checkTradeRange(t, q.dayLow, q.dayHigh)
@@ -221,7 +233,7 @@ function runStockVerify(
     setTimeout(() => acted.delete(t.id), 10_000)
     emitToast({
       tone: hit.reason === 'tp' ? 'win' : 'lose',
-      title: `${t.pair} menyentuh ${hit.reason === 'tp' ? 'Take Profit' : 'Stop Loss'}`,
+      title: `${btPrefix(t)}${t.pair} menyentuh ${hit.reason === 'tp' ? 'Take Profit' : 'Stop Loss'}`,
       body: `Ditutup otomatis @ ${hit.exitPrice}${q.time ? ` · data per ${dateTime(new Date(q.time).toISOString())}` : ''}`,
     })
   }
