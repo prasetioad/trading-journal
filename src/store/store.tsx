@@ -20,7 +20,38 @@ import { uid } from '../lib/format'
 import { applyTradeEdit, direction, outcomeOf, realizedPnl, realizedRR } from '../lib/finance'
 import { isEmpty, readAll, sheetsEnabled, writeAll } from '../lib/sheets'
 
-export type SyncStatus = 'off' | 'loading' | 'synced' | 'saving' | 'error'
+// 'loading' = the very first boot pull only — the app gates all editing on this
+// (see App.tsx) so nothing can be created/lost in the window before it resolves.
+// 'pulling' = a later, user-triggered force-pull (↺ Sheets) — same operation,
+// but the app is already usable so it isn't gated, just shown in the status pill.
+export type SyncStatus = 'off' | 'loading' | 'pulling' | 'synced' | 'saving' | 'error'
+
+/**
+ * Reconcile a remote collection with whatever changed locally *while the boot
+ * pull was in flight*. Without this, anything the user creates/edits in the
+ * first second or two after load (before `readAll()` resolves) gets silently
+ * discarded when the pull's — by then stale — snapshot overwrites local state.
+ *
+ * `touched` = ids present in `localNow` that differ from (or are absent from)
+ * `localBefore` (the snapshot taken the instant the pull started). Those ids
+ * win over whatever the remote says; everything else defers to remote.
+ * Local deletions made during the same window are not reconciled (the item
+ * just reappears from remote) — a rarer, less destructive edge case.
+ */
+export function reconcileCollection<T extends { id: string }>(remote: T[], localBefore: T[], localNow: T[]): T[] {
+  const beforeById = new Map(localBefore.map((x) => [x.id, x]))
+  const touched = localNow.filter((x) => {
+    const prev = beforeById.get(x.id)
+    return !prev || JSON.stringify(prev) !== JSON.stringify(x)
+  })
+  if (!touched.length) return remote
+  const touchedIds = new Set(touched.map((x) => x.id))
+  const localById = new Map(touched.map((x) => [x.id, x]))
+  const merged = remote.map((r) => (touchedIds.has(r.id) ? (localById.get(r.id) ?? r) : r))
+  const remoteIds = new Set(remote.map((r) => r.id))
+  for (const t of touched) if (!remoteIds.has(t.id)) merged.unshift(t)
+  return merged
+}
 
 type StrategyInput = Pick<
   Strategy,
@@ -82,7 +113,17 @@ interface StoreValue {
   resetDemo: () => void
   clearAll: () => void
   // sync (Google Sheets backend, when VITE_SHEETS_WEBAPP_URL is set)
-  sync: { status: SyncStatus; error: string | null; lastSync: number | null; pushNow: () => void }
+  sync: {
+    status: SyncStatus
+    error: string | null
+    lastSync: number | null
+    pushNow: () => void
+    /** Force-overwrite local (and its cache) with whatever is on the Sheet right
+     *  now — for manually recovering from a bad local state. Discards any local
+     *  change that hasn't been pushed yet (screenshots are the one exception:
+     *  they live only on-device and are always re-attached by trade id). */
+    pullNow: () => void
+  }
 }
 
 const Ctx = createContext<StoreValue | null>(null)
@@ -116,6 +157,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const pullRemote = useMemo(
+    () => async () => {
+      if (!sheetsEnabled()) return
+      setSyncStatus('pulling')
+      try {
+        const remote = await readAll()
+        const localNow = dbRef.current
+        const shots = new Map(
+          localNow.journal.filter((t) => t.screenshot_ref).map((t) => [t.id, t.screenshot_ref]),
+        )
+        const merged: DB = {
+          ...remote,
+          journal: remote.journal.map((t) =>
+            shots.has(t.id) ? { ...t, screenshot_ref: shots.get(t.id)! } : t,
+          ),
+        }
+        repository.write(merged)
+        setDb(merged)
+        setSyncStatus('synced')
+        setSyncError(null)
+        setLastSync(Date.now())
+      } catch (e) {
+        setSyncStatus('error')
+        setSyncError(e instanceof Error ? e.message : String(e))
+      }
+    },
+    [],
+  )
+
   const commit = (next: DB) => {
     repository.write(next) // local cache, always
     setDb(next)
@@ -129,27 +199,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!sheetsEnabled()) return
     let alive = true
+    const localBeforePull = dbRef.current // snapshot at the instant the pull starts
     ;(async () => {
       try {
         const remote = await readAll()
         if (!alive) return
+        const localNow = dbRef.current // may have moved on while readAll() was in flight
         if (isEmpty(remote)) {
-          await writeAll(dbRef.current) // first run — populate the Sheet from local
+          await writeAll(localNow) // first run — populate the Sheet from local
         } else {
           // screenshots live only in the browser — re-attach them by trade id
           const shots = new Map(
-            dbRef.current.journal
-              .filter((t) => t.screenshot_ref)
-              .map((t) => [t.id, t.screenshot_ref]),
+            localNow.journal.filter((t) => t.screenshot_ref).map((t) => [t.id, t.screenshot_ref]),
           )
           const merged: DB = {
-            ...remote,
-            journal: remote.journal.map((t) =>
+            strategies: reconcileCollection(remote.strategies, localBeforePull.strategies, localNow.strategies),
+            journal: reconcileCollection(remote.journal, localBeforePull.journal, localNow.journal).map((t) =>
               shots.has(t.id) ? { ...t, screenshot_ref: shots.get(t.id)! } : t,
             ),
+            analyses: reconcileCollection(remote.analyses, localBeforePull.analyses, localNow.analyses),
+            plans: reconcileCollection(remote.plans, localBeforePull.plans, localNow.plans),
           }
           repository.write(merged)
           setDb(merged)
+          // anything reconciled in from local (created/edited during the pull) isn't
+          // on the Sheet yet — push it back so the two stay consistent.
+          if (JSON.stringify(merged) !== JSON.stringify(remote)) {
+            if (pushTimer.current) clearTimeout(pushTimer.current)
+            pushTimer.current = setTimeout(() => void pushRemote(), 300)
+          }
         }
         setSyncStatus('synced')
         setSyncError(null)
@@ -339,9 +417,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         error: syncError,
         lastSync,
         pushNow: () => void pushRemote(),
+        pullNow: () => void pullRemote(),
       },
     }
-  }, [db, syncStatus, syncError, lastSync, pushRemote])
+  }, [db, syncStatus, syncError, lastSync, pushRemote, pullRemote])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }

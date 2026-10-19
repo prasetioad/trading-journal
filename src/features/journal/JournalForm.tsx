@@ -144,16 +144,27 @@ export function JournalForm({
     return (Number(entry) - Number(plannedEntry)) / Number(plannedEntry)
   }, [entry, plannedEntry])
 
-  const valid =
-    pair.trim().length > 0 &&
-    size !== '' &&
-    Number(size) > 0 &&
-    entry !== '' &&
-    tp !== '' &&
-    sl !== '' &&
-    Number(sl) !== Number(entry) &&
-    slSideOk &&
-    reasoning.trim().length > 0
+  // Every reason a click on "Simpan" can be a no-op, spelled out — so the
+  // button is never silently disabled with no way to tell why. (Reasoning is
+  // deliberately NOT required here: its own hint calls it free-form/optional,
+  // so requiring it silently blocked saves with no visible explanation.)
+  const missing = useMemo(() => {
+    const m: string[] = []
+    if (!pair.trim()) m.push('Pair belum diisi')
+    if (size === '' || Number(size) <= 0) m.push('Size harus lebih dari 0')
+    if (entry === '') m.push('Entry belum diisi')
+    if (tp === '') m.push('Take Profit belum diisi')
+    if (sl === '') m.push('Stop Loss belum diisi')
+    if (entry !== '' && sl !== '' && Number(sl) === Number(entry))
+      m.push('Stop Loss tidak boleh sama dengan Entry')
+    if (!slSideOk && dir)
+      m.push(
+        `Stop Loss di sisi yang salah — untuk ${dir === 'long' ? 'Long, SL harus di bawah Entry' : 'Short, SL harus di atas Entry'}`,
+      )
+    return m
+  }, [pair, size, entry, tp, sl, slSideOk, dir])
+
+  const valid = missing.length === 0
 
   async function onFile(file: File | undefined) {
     if (!file) return
@@ -437,6 +448,17 @@ export function JournalForm({
           )}
         </FormRow>
       </Fieldset>
+
+      {missing.length > 0 && (
+        <div className="rounded-lg border border-warn/30 bg-warn/8 px-3 py-2.5 text-xs text-warn">
+          <div className="mb-1 font-semibold">Belum bisa disimpan — lengkapi dulu:</div>
+          <ul className="list-disc space-y-0.5 pl-4">
+            {missing.map((m) => (
+              <li key={m}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="flex justify-end gap-2 pt-1">
         <button type="button" className="btn btn-ghost" onClick={onCancel}>

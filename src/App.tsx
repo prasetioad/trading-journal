@@ -61,7 +61,17 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <code className="text-ink-soft">docs/google-sheets-storage.md</code>. Harga crypto live via
           Binance.
         </p>
-        <button className="btn btn-ghost w-full text-xs" onClick={resetDemo}>
+        <button
+          className="btn btn-ghost w-full text-xs"
+          onClick={() => {
+            if (
+              confirm(
+                'Ganti SEMUA data dengan data demo bawaan? Strategi/trade/analisa kamu sendiri akan hilang dari tampilan lokal (dan ikut ter-sync ke Google Sheet jika tersambung).',
+              )
+            )
+              resetDemo()
+          }}
+        >
           Reset data demo
         </button>
         <button

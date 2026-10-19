@@ -115,6 +115,56 @@ describe('JournalForm — entry-rule checklist', () => {
   })
 })
 
+describe('JournalForm — save button never silently disabled', () => {
+  // Regression: reasoning used to be required for `valid` while its own hint
+  // ("catatan teknikal bebas") told the user it was optional — the Save button
+  // stayed disabled with zero explanation. Reasoning must now be optional, and
+  // whatever *is* still missing must be spelled out on screen.
+  it('submits successfully with the reasoning field left blank', () => {
+    const onSubmit = vi.fn<(d: TradeDraft) => void>()
+    render(<JournalForm strategies={[strat]} onSubmit={onSubmit} onCancel={() => {}} />)
+
+    fireEvent.change(screen.getByPlaceholderText('BTCUSDT'), { target: { value: 'BTCUSDT' } })
+    fireEvent.change(screen.getByPlaceholderText('1000'), { target: { value: '1000' } })
+    fireEvent.change(screen.getByPlaceholderText('61000'), { target: { value: '100' } })
+    fireEvent.change(screen.getByPlaceholderText('64000'), { target: { value: '110' } })
+    fireEvent.change(screen.getByPlaceholderText('60000'), { target: { value: '95' } })
+    // reasoning intentionally left blank
+
+    const btn = screen.getByRole('button', { name: /Simpan trade/ })
+    expect((btn as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(btn)
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].reasoning).toBe('')
+  })
+
+  it('spells out exactly what is missing while the form is incomplete', () => {
+    render(<JournalForm strategies={[strat]} onSubmit={vi.fn()} onCancel={() => {}} />)
+
+    // nothing filled yet -> disabled, with an explicit reason list
+    expect((screen.getByRole('button', { name: /Simpan trade/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByText('Belum bisa disimpan — lengkapi dulu:')).toBeTruthy()
+    expect(screen.getByText('Pair belum diisi')).toBeTruthy()
+    expect(screen.getByText('Entry belum diisi')).toBeTruthy()
+
+    fireEvent.change(screen.getByPlaceholderText('BTCUSDT'), { target: { value: 'BTCUSDT' } })
+    expect(screen.queryByText('Pair belum diisi')).toBeNull()
+
+    fireEvent.change(screen.getByPlaceholderText('1000'), { target: { value: '1000' } })
+    fireEvent.change(screen.getByPlaceholderText('61000'), { target: { value: '100' } })
+    fireEvent.change(screen.getByPlaceholderText('64000'), { target: { value: '110' } })
+    // SL equal to entry — a distinct, explicit reason
+    fireEvent.change(screen.getByPlaceholderText('60000'), { target: { value: '100' } })
+    expect(screen.getByText('Stop Loss tidak boleh sama dengan Entry')).toBeTruthy()
+    expect((screen.getByRole('button', { name: /Simpan trade/ }) as HTMLButtonElement).disabled).toBe(true)
+
+    fireEvent.change(screen.getByPlaceholderText('60000'), { target: { value: '95' } })
+    expect(screen.queryByText('Belum bisa disimpan — lengkapi dulu:')).toBeNull()
+    expect((screen.getByRole('button', { name: /Simpan trade/ }) as HTMLButtonElement).disabled).toBe(false)
+  })
+})
+
 // keep test isolation
 import { afterEach } from 'vitest'
 afterEach(() => cleanup())

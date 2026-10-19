@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npx oxlint *)",
+      "Bash(npx vitest *)",
+      "Bash(echo \"exit: $?\")",
+      "Bash(echo \"lint exit: $?\")",
+      "Bash(./node_modules/.bin/vitest run *)",
+      "Bash(echo \"vitest exit: $?\")"
+    ]
+  }
+}
